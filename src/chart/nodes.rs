@@ -134,33 +134,25 @@ impl ConfigNode {
 		}
 	}
 
-	pub fn get_people(&self, weeks: u32) -> HashMap<String, ChartTimeRow> {
+	/// Get a map from people to timerows.
+	///
+	/// It is an error if there are none defined, or if any are badly defined.
+	pub fn get_people(&self, weeks: u32) -> 
+							Result<HashMap<String, ChartTimeRow>, String> {
 		
-		match self.find_child_with_name("[people]") {
-			None => HashMap::new(),
-			Some(node) => {
-				match node.upgrade() {
-					None => HashMap::new(),
-					Some(n) => {
-						let mut h = HashMap::new();
-						for (key, val) in n.borrow().attributes.iter() {
-							match ChartTimeRow::new_populate_range(val, 
-																   weeks) {
-								Ok(ct) => {
-									h.insert(key.clone(), ct);
-								},
-								Err(e) => {
-									println!("Problem setting up resource for {}: {}", 
-										     key, 
-										     e.to_string());
-								}
-							}
-						}
-						h
-					}
-				}
-			}
+		let weak_node = try!(self.find_child_with_name("[people]")
+				                 .ok_or("[people] node must exist"));
+		let node = weak_node.upgrade().unwrap();
+
+		let mut people_hash = HashMap::new();
+		for (key, val) in node.borrow().attributes.iter() {
+			let ct = try!(ChartTimeRow::new_populate_range(val, weeks)
+				.map_err(|e| format!("Problem setting up resource for {}: {}",
+								     key, 
+								     e.to_string())));
+			people_hash.insert(key.clone(), ct);
 		}
+		Ok(people_hash)
 	}
 
 	/// Get a configuration value
@@ -216,7 +208,7 @@ impl ConfigNode {
 
 		// Read in resource information ([people])
 		let weeks: u32 = try!(self.get_config_val("weeks", None));
-		let mut people_hash = self.get_people(weeks);
+		let mut people_hash = try!(self.get_people(weeks));
 
 		// Move committed resource into the cells
 		try!(self.transfer_committed_resource(&mut people_hash));

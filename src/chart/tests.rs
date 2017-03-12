@@ -353,7 +353,7 @@ fn nodes_test() {
 	assert_eq!(h["weeks"], "10".to_string());
 
 	// Test people retrieval
-	let h2 = root_ref.get_people(10);
+	let h2 = root_ref.get_people(10).unwrap();
 	assert!(h2.contains_key("rf"));
 	assert!(h2.contains_key("rsl"));
 	assert_eq!(h2.len(), 2);
