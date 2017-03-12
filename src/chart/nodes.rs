@@ -69,8 +69,8 @@ impl ConfigNode {
 		count
 	}
 
-	pub fn find_child_with_name(&self, name: &str) -> 
-										Option<Weak<RefCell<ConfigNode>>> {
+	pub fn find_child_with_name(&self, name: &str) 
+			-> Option<Weak<RefCell<ConfigNode>>> {
 
 		if self.name == name {
 			return None;
@@ -113,13 +113,13 @@ impl ConfigNode {
 
 	/// Get new hashmap containing all of the attributes
 	pub fn get_attribute_hash(&self) -> HashMap<String, String> {
-		let mut h = HashMap::new();
+		let mut attr_hash = HashMap::new();
 
 		for (key, val) in self.attributes.iter() {
-			h.insert(key.clone(), val.clone());
+			attr_hash.insert(key.clone(), val.clone());
 		}
 
-		h
+		attr_hash
 	}
 
 	pub fn get_global_config(&self) -> HashMap<String, String> {
@@ -137,8 +137,8 @@ impl ConfigNode {
 	/// Get a map from people to timerows.
 	///
 	/// It is an error if there are none defined, or if any are badly defined.
-	pub fn get_people(&self, weeks: u32) -> 
-							Result<HashMap<String, ChartTimeRow>, String> {
+	pub fn get_people(&self, weeks: u32) 
+			-> Result<HashMap<String, ChartTimeRow>, String> {
 		
 		let weak_node = try!(self.find_child_with_name("[people]")
 				                 .ok_or("[people] node must exist"));
@@ -156,7 +156,8 @@ impl ConfigNode {
 	}
 
 	/// Get a configuration value
-	pub fn get_config_val<T>(&self, key: &str, default: Option<T>) -> Result<T, String> 
+	pub fn get_config_val<T>(&self, key: &str, default: Option<T>)
+			-> Result<T, String> 
 		where T: FromStr, 
 		      <T as FromStr>::Err: Display {
 
@@ -178,24 +179,41 @@ impl ConfigNode {
 		}
 	}
 
-	pub fn transfer_committed_resource(&mut self, people_hash: &mut HashMap<String, ChartTimeRow>) -> Result<(), String> {
+	pub fn transfer_committed_resource
+			(&mut self, people_hash: &mut HashMap<String, ChartTimeRow>) 
+			-> Result<(), String> {
 
-		let valid_who: Vec<String> = people_hash.keys().map(|x| x.clone()).collect();
+		let valid_who: Vec<String> = people_hash.keys()
+		                                        .map(|x| x.clone())
+		                                        .collect();
 		for (start, duration) in self.get_commitments() {
-			let who = try!(self.get_who(&valid_who).ok_or(format!("Node at line {} has commitments but no owner", self.line_num)));
-			match people_hash.get_mut(&who).unwrap().fill_transfer_to(&mut self.cells, duration.quarters() as u32, start.get_quarter() .. (start.get_quarter() + (duration.quarters() as u32) - 1)) {
+			let who = 
+				try!(self.get_who(&valid_who)
+			             .ok_or(format!("Node at line {} has \
+				        		      	 commitments but no owner", 
+				        		      	self.line_num)));
+			match people_hash.get_mut(&who)
+			                 .unwrap()
+			                 .fill_transfer_to
+			                 	(&mut self.cells, 
+								 duration.quarters() as u32, 
+								 start.get_quarter() .. 
+								   (start.get_quarter() + 
+								    (duration.quarters() as u32) - 1)) {
 				(_, _, 0) => {
 					continue;
 				},
 				_ => {
-					return Err(format!("Unable to transfer resource for node at line {}", self.line_num))
+					return Err(format!("Unable to transfer resource for node \
+										at line {}", self.line_num))
 				}
 			}
 		}
 
 		// Now do any child nodes
 		for child_rc in &self.children {
-			try!(child_rc.borrow_mut().transfer_committed_resource(people_hash));
+			try!(child_rc.borrow_mut()
+						 .transfer_committed_resource(people_hash));
 		}
 
 		Ok(())
@@ -253,7 +271,9 @@ impl ConfigNode {
 				match ChartTime::new(time) {
 					Ok(ct) => Some(ct),
 					Err(e) => {
-						println!("Invalid end time in node at line {}: {}", self.line_num, e.to_string());
+						println!("Invalid end time in node at line {}: {}", 
+								 self.line_num, 
+								 e.to_string());
 						None
 					}
 				}
@@ -272,7 +292,9 @@ impl ConfigNode {
 				match ChartTime::new(time) {
 					Ok(ct) => Some(ct),
 					Err(e) => {
-						println!("Invalid start time in node at line {}: {}", self.line_num, e.to_string());
+						println!("Invalid start time in node at line {}: {}", 
+								 self.line_num, 
+								 e.to_string());
 						None
 					}
 				}
@@ -338,7 +360,8 @@ impl ConfigNode {
 				} else if resource == "prodsfr" {
 					Some(ResourcingStrategy::ProdSFR)
 				} else {
-					println!("Invalid scheduling strategy in node at line {}", self.line_num);
+					println!("Invalid scheduling strategy in node at line {}", 
+							 self.line_num);
 					None
 				}
 			},
@@ -363,7 +386,8 @@ impl ConfigNode {
 			} else if self.attributes[key] == "serial" {
 				SchedulingStrategy::Serial
 			} else {
-				println!("Invalid scheduling strategy in node at line {}", self.line_num);
+				println!("Invalid scheduling strategy in node at line {}", 
+						 self.line_num);
 				SchedulingStrategy::Parallel
 			}
 		}
@@ -392,7 +416,8 @@ impl ConfigNode {
 	///
 	///	The planned time, as well as being a number, can also be suffixed with pcy or
 	/// pcm.  This function converts suffixed values into actual durations.
-	pub fn get_plan(&self, when: &ChartTime, time_in_chart: &Duration) -> Option<Duration> {
+	pub fn get_plan(&self, when: &ChartTime, time_in_chart: &Duration) 
+			-> Option<Duration> {
 
 		let key = "plan";
 		let plan_str: String;
@@ -423,7 +448,8 @@ impl ConfigNode {
 		for val in v {
 			let v2: Vec<&str> = val.split(":").collect();
 			if v2.len() > 2 {
-				println!("Invalid plan part in node at line {}: {} has more than 2 parts", self.line_num, val);
+				println!("Invalid plan part in node at line {}: {} has more \
+						  than 2 parts", self.line_num, val);
 				return None;
 			}
 			if v2.len() == 1 {
@@ -433,7 +459,8 @@ impl ConfigNode {
 			}
 			match ChartTime::new(v2[0]) {
 				Err(e) => {
-					println!("Invalid plan part in node at line {}: {}", self.line_num, e.to_string());
+					println!("Invalid plan part in node at line {}: {}", 
+							 self.line_num, e.to_string());
 					return None;
 				},
 				Ok(ref ct) => {
@@ -453,7 +480,8 @@ impl ConfigNode {
 		// So, we have a value in use_val.  Try to convert it to a duration.
 		match Duration::new_from_string(&use_val, time_in_chart) {
 			Err(e) => {
-				println!("Invalid plan in node at line {}: {}", self.line_num, e);
+				println!("Invalid plan in node at line {}: {}", 
+						 self.line_num, e);
 				None
 			},
 			Ok(dur) => {
@@ -474,7 +502,8 @@ impl ConfigNode {
 					return Some(who);
 				}
 				else {
-					println!("Invalid who in (or inherited by) node at line {}", self.line_num);
+					println!("Invalid who in (or inherited by) node at \
+							  line {}", self.line_num);
 					return None;
 				}
 			},
@@ -503,7 +532,8 @@ impl ConfigNode {
 
 		match self.attributes[key].parse::<f32>() {
 			Err(e) => {
-				println!("Invalid budget in node at line {}: {}", self.line_num, e.to_string());
+				println!("Invalid budget in node at line {}: {}", 
+						 self.line_num, e.to_string());
 				return None;
 			}
 			Ok(dur) => {
@@ -512,9 +542,10 @@ impl ConfigNode {
 		}
 	}
 
-	/// Return a weak reference to a child Node at a given line in the config file.
-	pub fn get_node_at_line(&self, 
-						    line_num: u32) -> Option<Weak<RefCell<ConfigNode>>> {
+	/// Return a weak reference to a child Node at a given line in the 
+	/// config file.
+	pub fn get_node_at_line(&self, line_num: u32) 
+			-> Option<Weak<RefCell<ConfigNode>>> {
 
 		if self.line_num == line_num {
 			return None;
@@ -536,32 +567,50 @@ impl ConfigNode {
 		None
 	}
 
+	/// Read the config and build up a node hierarchy
+	///
+	/// This function is recursive
+	/// - Child nodes are created, then given control
+	/// - Higher-level nodes are passed to the parent to deal with
 	pub fn consume_config(&mut self, 
 						  ref_self: Option<&Rc<RefCell<ConfigNode>>>, 
-						  file: &mut ConfigLines) -> Result<(), String> {
+						  file: &mut ConfigLines) 
+			-> Result<(), String> {
 
+		// Loop through the config, handling nodes and attributes differently
 		loop {
 			match file.peek_line() {
 				Some(Line::Node(LineNode {line_num, indent, name } )) => {
+
+					// Higher-level or sibling node - return to the parent
+					// to handle.
 					if self.indent >= indent {
 						break;
 					}
 
+					// Create new child
 					file.get_line().unwrap();
 					self.new_child(&name, indent, line_num);
 
-					// Use child of our parent?  Maybe via find_node_at_line?  Or have the Rc<<>> in scope to use here?
+					// Set child's back-pointer as a weak reference to self
 					let new_child = &self.children[self.children.len() - 1];
 					new_child.borrow_mut().parent = match ref_self {
 						None => None,
 						Some(rc) => Some(Rc::downgrade(rc))
 					};
-					new_child.borrow_mut().consume_config(Some(&new_child), file).unwrap();
+
+					// Pass control to the child
+					new_child.borrow_mut()
+							 .consume_config(Some(&new_child), file).unwrap();
 				}
+
+				// Attributes are simply added to the current node.
 				Some(Line::Attribute(LineAttribute {key, value } )) => {
 					self.create_attribute(&key, &value);
 					file.get_line().unwrap();
 				}
+
+				// End of config
 				None => { break; }
 			};
 		}
