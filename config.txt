@@ -1,0 +1,205 @@
+# Config for Resource planner
+#
+# Times are to the nearest quarter day.  A specific quarter 
+# is referenced using <week>.<day of week>.<quarter> notation.
+# <quarter> (1-4) and <day of week> (1-5) may be omitted if
+# that level of accuracy is not required.
+#
+
+# Process
+# - Plan the task at a high level.  Planned figures never change.
+# - Assigned budget that covers plan
+# - Ongoing
+#   - Simple case: add committed time as work is done.  Time
+#     remaining is calculated from plan and work done.
+#   - Work doesn't take the planned time
+#     - Update gain, but track history, using <week>>:<gain-in-days>, eg
+#       - gain: 1:-2, 3:-1, 4:2
+#     - Warn when sumof child plan+gain doesn't match parent plan+gain
+#   - Subdivide item into multiple
+#     - Each child has it's own plan
+#     - If sumof child plans don't match parent plan+gain, update parent gain
+# 
+# 
+# 
+# Times
+# - budget
+#   - Amount of time allocated to me to spend on stuff.  
+#   - Can be updated.
+#   - Isn't inherited.
+# - default-plan
+#   - Provide a default "plan" value for child nodes
+# - plan
+#   - Original planned time for this task.
+#   - Amount of time expected to spend on this in total
+#   - All leaf nodes must have a plan.  Worst case is to
+#     divvy up the left-over plan from parent node between
+#     all child nodes that don't have one.
+# 
+# - Row has
+#   - A series of planned times, with dates against each replan
+#     - Call the 1st init-plan (or we could specify a date we want the slip/gain from)
+#     - Call the last curr-plan
+#   - Work already done (done) [leaf row only]
+#   - Future committments (mainly holidays, events) (scheduled) [leaf row only]
+# 
+# - From this, we can derive for a leaf row 
+#   - Remaining: curr-plan - (done + scheduled)
+#   - Gain: init-plan - curr_plan
+#   - Disaster: (done + scheduled) > curr-plan: Need replan.  No need to cope with this.
+#   - summed-curr-plan: latest plan number
+# 
+# - For higher-level rows 
+#   - Remaining: SUMOF remaining for the children
+#   - Summed-curr-plan: SUMOF summed-curr-plan for children 
+#   - Gain: init-plan - derived-curr-plan
+# 
+# - For budget rows 
+#   - Remaining: SUMOF remaining for the children
+#   - Gain: budget - summed-curr-plan
+# 
+# 
+
+
+# - The above can be determined recursively for higher-level nodes
+# 
+# - What if the higher-level node has a plan?
+#   - We can display slip/gain for that node, against its init-plan
+# 
+# - Are we getting a clear slip/gain against budget?
+#   - Yes - that uses 
+# 
+# - What happens if the budget changes?
+#   - Slip/gain changes.  Planned numbers are unchanged.  Win!
+#
+# - What do I need to know?
+#   - For Jon
+#     - slip/gain against budgets
+#       - 
+#     - slip/gain against budget categories
+#     - slack: overall and per-person
+#   - For me
+#     - slip/gain against plan - where I need to be worrying
+#     - 
+#
+#
+#
+#
+#
+
+#
+# Inheritance
+# - If a value is not present at a node, search back up the heirarchy, except
+#   - who - if missing in heirarchy, use the node name
+#   - budget - only applies to the node it is found on
+#   - plan?
+#   - schedule - only applies to the current node, defaults to parallel
+# 
+# Resource allocation strategy
+# - Transfer all committed resource
+# - Allocate all spread resource
+# - Allocate PRD resource forwards from now, in order of PRDs in the config
+# - Allocate backloaded resource, filling from end of period
+
+[chart]
+- weeks: 10   # Number of weeks in the chart
+- today: 3.4  # Thursday of week 3.  Expect everything up to the Wednesday to be up to date
+
+# People, and the period that they are available.
+[people]
+- rf: 1..10
+- rsl: 1..10
+- bdh: 1..8.3
+- jw2: 1..10
+- bg5: 1..10
+
+[rows]
+Holidays
+- budget: 50
+- schedule: parallel
+- resource: spread  # Uncommitted resource is spread equally across the remaining time, before scheduling other tasks
+- non-managed: true # No management resource is spent on people that are on holiday
+
+  rf
+  - who: rf
+  - plan: 35pcy
+  - C2.3.3: 2.5   # 2.5 days starting on the 3rd quarter of the 3rd day in the 2nd week
+  - C6.2: 1
+
+  rsl
+  - who: rsl
+  - plan: 25pcy
+
+  bdh
+  - who: bdh
+  - plan: 25pcy
+
+  jw2
+  - who: jw2
+  - plan: 35pcy
+
+  bg5
+  - who: bg5
+  - plan: 35pcy
+
+Overheads
+- budget: 30
+
+  Education/illness
+  - default-plan: 4pcy   # Number of days per person per calendar year
+
+    rf    # If there's no "who:", use the row name
+    rsl
+    bdh
+    - C1.3.3: 2.5
+    jw2
+    bg5
+
+  Hackathon
+  - budget: 5
+  - schedule: parallel
+  - non-managed: true
+
+    rf
+    - C5.5: 1
+    rsl
+    - C5.5: 1
+    bdh
+    - C5.5: 1
+    jw2
+    - C5.5: 1
+    bg5
+
+EAS Prod SFRs
+- budget: 30
+- schedule: parallel
+- resource: prodsfr     # 20% budget is "spread", the other 80% is back loaded
+
+  rsl
+  - plan: 20
+
+  rf
+  - plan: 10
+
+PRD 12345
+- budget: 90
+- schedule: series
+
+  DCUT
+  - plan: 30
+
+  FV
+  - plan: 10  # overridden by plan for sub-tasks
+  - schedule: parallel
+
+    Test
+    - who: bg5
+      - plan: 6
+    Fix
+    - who: jw2
+    - plan: 6
+
+  ST            # 40 elapsed days. starting week 6
+  - plan: 40
+  - who: outsource
+  - start: 6
