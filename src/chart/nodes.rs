@@ -169,7 +169,8 @@ impl ConfigNode {
 			Some(k) => {
 				match k.parse::<T>() {
 					Ok(v) => Ok(v),
-					Err(e) => Err(format!("Problem parsing config {}: {}", key, e.to_string()))
+					Err(e) => Err(format!("Problem parsing config {}: {}", 
+										  key, e.to_string()))
 				}
 			},
 			None => match default {
@@ -414,8 +415,9 @@ impl ConfigNode {
 	///	For this reason, the function requires a date, `when`, to
 	/// specify the point for which the planned date is required.
 	///
-	///	The planned time, as well as being a number, can also be suffixed with pcy or
-	/// pcm.  This function converts suffixed values into actual durations.
+	///	The planned time, as well as being a number, can also be suffixed with
+	/// pcy or pcm.  This function converts suffixed values into actual 
+	/// durations.
 	pub fn get_plan(&self, when: &ChartTime, time_in_chart: &Duration) 
 			-> Option<Duration> {
 
