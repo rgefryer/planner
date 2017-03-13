@@ -39,6 +39,23 @@ impl ChartTimeRow {
 		ChartTimeRow { cells: Vec::new() }
 	}
 
+	/// Return a string describing the weekly numbers
+	pub fn get_weekly_summary(&self, weeks: u32) -> String {
+
+		let mut output = String::new();
+		output.push_str(&format!("{: >6}", self.count()));
+		output.push_str(&format!("{: >6}", 20 * weeks - self.count()));
+		for week in 0..weeks {
+			let count = self.count_range(week*20 .. (week+1)*20);
+			if count == 0 {
+				output.push_str("   ");
+			} else {
+				output.push_str(&format!("{: >3}", count));
+			}
+		}
+		output
+	}
+
 	/// Create new row populated according to the
 	/// specified range.
 	///
@@ -115,6 +132,20 @@ impl ChartTimeRow {
 		for cell in range {
 			self.set(cell);
 		}
+	}
+
+	/// Count how many of a range of cells are set
+	pub fn count_range<'a, I>(&self, range: I) ->u32
+	  where I: Iterator<Item=u32> {
+
+	  	let mut count = 0u32;
+		for cell in range {
+			if self.is_set(cell) {
+				count += 1;
+			}
+		}
+
+		count
 	}
 
 	/// Count the number of cells that are set

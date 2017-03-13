@@ -137,6 +137,11 @@ fn timerow_test() {
 		Ok(_) => assert!(false),
 		Err(unallocated) => assert!(unallocated == 1),
 	}
+
+	// Test row display
+	assert_eq!(g2.get_weekly_summary(3), "    13    47    12  1".to_string());
+	assert_eq!(g.get_weekly_summary(3),  "    37    23 20  8  9".to_string());
+
 }
 
 #[test]
