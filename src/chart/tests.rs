@@ -172,7 +172,7 @@ fn file_test() {
 
 #[test]
 fn nodes_test() {
-	let rc_root = Rc::new(RefCell::new(ConfigNode::new("root", 0, 0)));
+	let rc_root = Rc::new(RefCell::new(ConfigNode::new("root", 0, 0, 0)));
 
 	// Set up config file
 	let mut f = ConfigLines::new();

@@ -17,6 +17,7 @@ pub struct ConfigNode {
 	name: String,
 	line_num: u32,
 	indent: u32,
+	level: u32,  // Root node is level 0
 	attributes: HashMap<String, String>,
 
 	children: Vec<Rc<RefCell<ConfigNode>>>,
@@ -29,10 +30,12 @@ pub struct ConfigNode {
 
 impl ConfigNode {
 
-	pub fn new(name: &str, indent: u32, line_num: u32) -> ConfigNode {
+	pub fn new(name: &str, level: u32, indent: u32, line_num: u32) 
+			-> ConfigNode {
 		ConfigNode { name: name.to_string(), 
 			         line_num: line_num,
 					 indent: indent, 
+					 level: level, 
 					 attributes: HashMap::new(), 
 					 children: Vec::new(),
 					 parent: None,
@@ -45,6 +48,7 @@ impl ConfigNode {
 
 	fn new_child(&mut self, name: &str, indent: u32, line_num: u32) {
 		self.children.push(Rc::new(RefCell::new(ConfigNode::new(name, 
+																self.level+1,
 																indent, 
 																line_num))));
 	}
@@ -90,6 +94,9 @@ impl ConfigNode {
 
 		if self.attributes.contains_key(key) {
 			return Some(self.attributes[key].clone());
+		} else if self.level == 1 {
+			// There are no attributes on the root node.
+			return None;
 		}
 		else {
 			match self.parent {
@@ -97,8 +104,8 @@ impl ConfigNode {
 				Some(ref p) => {
 					match p.upgrade() {
 						None => None,
-						Some(node) => 
-									node.borrow().get_inherited_attribute(key)
+						Some(node) => node.borrow()
+										  .get_inherited_attribute(key)
 					}
 				}
 			}
@@ -180,7 +187,7 @@ impl ConfigNode {
 		}
 	}
 
-	pub fn transfer_committed_resource
+	pub fn transfer_local_committed_resource
 			(&mut self, people_hash: &mut HashMap<String, ChartTimeRow>) 
 			-> Result<(), String> {
 
@@ -200,21 +207,37 @@ impl ConfigNode {
 								 duration.quarters() as u32, 
 								 start.get_quarter() .. 
 								   (start.get_quarter() + 
-								    (duration.quarters() as u32) - 1)) {
+								    (duration.quarters() as u32))) {
 				(_, _, 0) => {
 					continue;
 				},
-				_ => {
-					return Err(format!("Unable to transfer resource for node \
-										at line {}", self.line_num))
+				(_, ok, fail) => {
+					let mut err_string = String::new();
+					err_string.push_str(&format!("Unable to transfer resource \
+												 for node at line {}", 
+												 self.line_num));
+					err_string.push_str(&format!("\n  start={:?}", start));
+					err_string.push_str(&format!("\n  duration={:?}", duration));
+					err_string.push_str(&format!("\n  transferred={:?}", ok));
+					err_string.push_str(&format!("\n  missed={:?}", fail));
+					return Err(err_string)
 				}
 			}
 		}
 
+		Ok(())
+	}
+
+	pub fn transfer_child_committed_resource
+			(&self, people_hash: &mut HashMap<String, ChartTimeRow>) 
+			-> Result<(), String> {
+
 		// Now do any child nodes
 		for child_rc in &self.children {
 			try!(child_rc.borrow_mut()
-						 .transfer_committed_resource(people_hash));
+						 .transfer_local_committed_resource(people_hash));
+			try!(child_rc.borrow()
+						 .transfer_child_committed_resource(people_hash));
 		}
 
 		Ok(())
@@ -230,7 +253,7 @@ impl ConfigNode {
 		let mut people_hash = try!(self.get_people(weeks));
 
 		// Move committed resource into the cells
-		try!(self.transfer_committed_resource(&mut people_hash));
+		try!(self.transfer_child_committed_resource(&mut people_hash));
 
 		// Handle all non-managed rows
 
@@ -239,6 +262,10 @@ impl ConfigNode {
 		// Handle all managed rows
 
 		Ok(())
+	}
+
+	pub fn display_gantt(&self) -> Result<(), String> {
+		Err("display_gantt is not yet implemented".to_string())
 	}
 
 	// Functions to derive resourcing information

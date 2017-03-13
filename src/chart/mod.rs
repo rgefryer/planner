@@ -15,8 +15,6 @@ pub use self::duration::*;
 pub use self::time::*;
 pub use self::timerow::*;
 
-use std::collections::HashMap;
-
 /// Strategy for scheduling child nodes
 #[derive(Debug, Eq, PartialEq)]
 pub enum SchedulingStrategy {
@@ -77,42 +75,3 @@ pub enum ResourcingStrategy {
 
 }
 
-/// A row of the Gantt Chart, representing an item of work
-#[derive(Debug)]
-struct TaskRow {
-
-	/// Scheduled (or completed) times
-	times: ChartTimeRow,
-
-	/// Time currently agreed for this activity
-	budget: Duration,
-
-	/// How the time should be allocated
-	time_allocation: ResourcingStrategy,
-
-	/// Current slip/gain, within plan
-	gain: Duration,
-
-	/// Original budget for this work.  Not used in calculations.
-	original_budget: Duration,
-
-	/// Historical slip/gain.  This is already reflected in the budget,
-	/// and is not used in calculations.
-	historical_gain: Duration,
-}
-
-
-/// An entire Gantt chart - a collection of rows
-#[derive(Debug)]
-struct GanttChart {
-
-	/// Rows representing task work
-	work_rows: Vec<TaskRow>,
-
-	/// Rows representing people - resource to be allocated
-	resource_rows: HashMap<String, ChartTimeRow>,
-
-	/// Length of the chart
-	chart_length: Duration,
-
-}
