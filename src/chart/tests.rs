@@ -139,8 +139,8 @@ fn timerow_test() {
 	}
 
 	// Test row display
-	assert_eq!(g2.get_weekly_summary(3), "    13    47    12  1".to_string());
-	assert_eq!(g.get_weekly_summary(3),  "    37    23 20  8  9".to_string());
+	assert_eq!(g2.get_weekly_summary(3), "    12  1".to_string());
+	assert_eq!(g.get_weekly_summary(3),  " 20  8  9".to_string());
 
 }
 

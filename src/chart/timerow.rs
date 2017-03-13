@@ -43,15 +43,21 @@ impl ChartTimeRow {
 	pub fn get_weekly_summary(&self, weeks: u32) -> String {
 
 		let mut output = String::new();
-		output.push_str(&format!("{: >6}", self.count()));
-		output.push_str(&format!("{: >6}", 20 * weeks - self.count()));
+		for count in self.get_weekly_numbers(weeks) {
+			match count {
+				0 => output.push_str("   "),
+				_ => output.push_str(&format!("{: >3}", count))
+			};
+		}
+		output
+	}
+
+	/// Return a vector of the weekly numbers
+	pub fn get_weekly_numbers(&self, weeks: u32) -> Vec<u32> {
+
+		let mut output = Vec::new();
 		for week in 0..weeks {
-			let count = self.count_range(week*20 .. (week+1)*20);
-			if count == 0 {
-				output.push_str("   ");
-			} else {
-				output.push_str(&format!("{: >3}", count));
-			}
+			output.push(self.count_range(week*20 .. (week+1)*20));
 		}
 		output
 	}
