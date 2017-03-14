@@ -1,7 +1,20 @@
+#![feature(plugin)]
+#![plugin(rocket_codegen)]
+extern crate rocket;
+extern crate rocket_contrib;
 mod chart;
-
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::collections::HashMap;
+use rocket_contrib::Template;
+
+#[cfg(not(test))]
+#[get("/")]
+fn index() -> Template {
+    let mut context = HashMap::new();
+    context.insert("text", "Hello world");
+    Template::render("index", &context)
+}
 
 #[cfg(not(test))]
 fn do_work() -> Result<(), String> {
@@ -24,7 +37,6 @@ fn do_work() -> Result<(), String> {
 	Ok(())
 }
 
-
 #[cfg(not(test))]
 fn main() {
 
@@ -32,4 +44,6 @@ fn main() {
 		Ok(()) => println!("Complete!"),
 		Err(e) => println!("Error: {}", e)
 	};
+    rocket::ignite().mount("/", routes![index]).launch();
+
 }
