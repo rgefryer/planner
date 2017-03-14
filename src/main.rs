@@ -42,7 +42,7 @@ fn index() -> Template {
             done: "10.5".to_string(),
             left: "20".to_string(),
             even: (ix % 2) == 0,
-            weeks: vec!["3", "2.5", "", "1.25", "8"].iter().map(|s| s.to_string()).collect()
+            weeks: vec![3f32, 2.5f32, 0f32, 1.25f32, 8f32].iter().map(|s| format!("{:.2}", s).replace(".0", "&nbsp;&nbsp;").replace("0", "&nbsp;")).collect()
         });
     }
 
