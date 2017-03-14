@@ -8,7 +8,6 @@ extern crate serde_json;
 mod chart;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::collections::HashMap;
 use rocket_contrib::Template;
 
 #[derive(Serialize)]
@@ -17,6 +16,7 @@ struct TemplateRow {
     who: String,
     done: String,
     left: String,
+    even: bool,
     weeks: Vec<String>
 }
 
@@ -35,12 +35,13 @@ fn index() -> Template {
         weeks: vec!["1", "2", "3", "4", "5"].iter().map(|s| s.to_string()).collect(),
         rows: Vec::new()
     };
-    for _ in 1 .. 10 {
+    for ix in 1 .. 10 {
         context.rows.push(TemplateRow {
             what: "Big important task".to_string(),
             who: "rf".to_string(),
             done: "10.5".to_string(),
             left: "20".to_string(),
+            even: (ix % 2) == 0,
             weeks: vec!["3", "2.5", "", "1.25", "8"].iter().map(|s| s.to_string()).collect()
         });
     }
