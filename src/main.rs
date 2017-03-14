@@ -2,17 +2,49 @@
 #![plugin(rocket_codegen)]
 extern crate rocket;
 extern crate rocket_contrib;
+extern crate serde_json;
+#[macro_use] extern crate serde_derive;
+
 mod chart;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::collections::HashMap;
 use rocket_contrib::Template;
 
+#[derive(Serialize)]
+struct TemplateRow {
+    what: String,
+    who: String,
+    done: String,
+    left: String,
+    weeks: Vec<String>
+}
+
+#[derive(Serialize)]
+struct TemplateContext {
+    weeks: Vec<String>,
+    rows: Vec<TemplateRow>
+}
+
+
 #[cfg(not(test))]
 #[get("/")]
 fn index() -> Template {
-    let mut context = HashMap::new();
-    context.insert("text", "Hello world");
+
+    let mut context = TemplateContext {
+        weeks: vec!["1", "2", "3", "4", "5"].iter().map(|s| s.to_string()).collect(),
+        rows: Vec::new()
+    };
+    for _ in 1 .. 10 {
+        context.rows.push(TemplateRow {
+            what: "Big important task".to_string(),
+            who: "rf".to_string(),
+            done: "10.5".to_string(),
+            left: "20".to_string(),
+            weeks: vec!["3", "2.5", "", "1.25", "8"].iter().map(|s| s.to_string()).collect()
+        });
+    }
+
     Template::render("index", &context)
 }
 
@@ -47,3 +79,4 @@ fn main() {
     rocket::ignite().mount("/", routes![index]).launch();
 
 }
+

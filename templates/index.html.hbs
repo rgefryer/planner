@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Planner Demo</title>
+  </head>
+<body>
+    <table>
+        <thead>
+            <tr>
+                <td>What</td>
+                <td>Who</td>
+                <td>Done</td>
+                <td>Left</td>
+                {{#each weeks}}
+                    <td>{{this}}</td>
+                {{/each}}
+            </tr>
+        </thead>
+        <tbody>
+        {{#each rows as |row|}}
+            <tr>
+                <td>{{row.what}}</td>
+                <td>{{row.who}}</td>
+                <td>{{row.done}}</td>
+                <td>{{row.left}}</td>
+                {{#each row.weeks as |w|}}
+                    <td>{{w}}</td>
+                {{/each}}
+            </tr>
+        {{/each}}
+        </tbody>
+    </table>
+</body>
+</html>
+
