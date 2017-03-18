@@ -10,6 +10,9 @@ use super::generate_chart_nodes;
 #[cfg(not(test))]
 use super::ConfigNode;
 
+#[cfg(not(test))]
+use super::time::*;
+
 #[derive(Serialize)]
 pub struct TemplateRow {
     what: String,
@@ -21,7 +24,7 @@ pub struct TemplateRow {
     even: bool,
     notes: Vec<String>,
     notes_html: String,
-    cells: Vec<String>
+    cells: Vec<(String, String)>,
 }
 
 // @@@ Display "plan", "gain"
@@ -61,8 +64,15 @@ impl TemplateRow {
         }
     }
 
-    pub fn add_cell(&mut self,  val: f32) {
-        self.cells.push(TemplateRow::format_f32(val));
+    pub fn add_cell(&mut self,  val: f32, start: bool) {
+        let mut styles = "grid".to_string();
+        if start {
+            styles.push_str(" start");
+        } else if self.cells.len() == 0 {
+            styles.push_str(" border");
+        }
+
+        self.cells.push((styles, TemplateRow::format_f32(val)));
     }
 
     pub fn add_note(&mut self,  val: &str) {
@@ -96,20 +106,30 @@ impl TemplateRow {
             self.notes_html.push_str("<br>");
             self.notes_html.push_str(&note);
         }
+
+
     }
 }
 
 #[derive(Serialize)]
 pub struct TemplateContext {
-    cell_headers: Vec<String>,
+    cell_headers: Vec<(String, String)>,
     rows: Vec<TemplateRow>
 }
 
  impl TemplateContext {
-    pub fn new(cells: u32) -> TemplateContext {
+    pub fn new(cells: u32, start_cell: u32) -> TemplateContext {
         TemplateContext {
-            cell_headers: (1 .. cells+1).map(|s| format!("{}", s))
-                                        .collect(),
+            cell_headers: (1 .. cells+1)
+                .map(|s| ( if s == start_cell {
+                                    "grid start".to_string()
+                                } else if s == 1 {
+                                    "grid border".to_string()
+                                } else {
+                                    "grid".to_string()
+                                }, 
+                            format!("{}", s)))
+                .collect(),
             rows: Vec::new()
         }
     }
@@ -131,7 +151,11 @@ pub struct TemplateContext {
 fn generate_chart_html(root: &mut ConfigNode) -> Result<Template, String> {
 
     let weeks: u32 = try!(root.get_config_val("weeks", None));
-    let mut context = TemplateContext::new(weeks);
+    let start: ChartTime = 
+        try!(root.get_config_val("today", Some(ChartTime::new("1").unwrap())));
+    let start_week = (start.get_quarter() + 20) / 20;
+
+    let mut context = TemplateContext::new(weeks, start_week);
     try!(root.display_gantt(&mut context));
 
     // Do any required preparation before rendering

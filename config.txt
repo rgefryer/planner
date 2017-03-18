@@ -103,7 +103,7 @@
 
 [chart]
 - weeks: 10   # Number of weeks in the chart
-- today: 3.4  # Thursday of week 3.  Expect everything up to the Wednesday to be up to date
+- today: 3  # Thursday of week 3.  Expect everything up to the Wednesday to be up to date
 
 # People, and the period that they are available.
 [people]

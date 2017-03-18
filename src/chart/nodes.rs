@@ -633,12 +633,24 @@ impl ConfigNode {
 
 	    let weeks: u32 = try!(root.get_config_val("weeks", None));
 
-	    // Set up row data for self
+        // Get start time for the period to allocate.  Assume that everything
+        // prior to this has been committed.
+        let start: ChartTime = 
+                try!(root.get_config_val("today", Some(ChartTime::new("1").unwrap())));
+        //let end: ChartTime = ChartTime::new(&format!("{}", weeks+1)).unwrap();
+
+        // Work out which is the start week.
+        let start_week = start.get_quarter() / 20;
+
+        // Set up row data for self
         let mut row = TemplateRow::new(self.data.borrow().level, self.data.borrow().line_num, &self.data.borrow().name);
-		for val in &self.data.borrow().cells.get_weekly_numbers(weeks)	{
-			row.add_cell(*val as f32 / 4.0);
-		}
-		row.set_done(self.data.borrow().cells.count() as f32 / 4.0);
+        let mut count = 0;
+        for val in &self.data.borrow().cells.get_weekly_numbers(weeks)  {
+            row.add_cell(*val as f32 / 4.0, count == start_week);
+            count += 1;
+        }
+
+		row.set_done(self.data.borrow().cells.count_range(0 .. start.get_quarter()) as f32 / 4.0);
 
         match self.get_plan(&ChartTime::new(&format!("{}", weeks+1)).unwrap(), 
                                              &Duration::new_days(weeks as f32 * 5.0)) {
@@ -687,12 +699,24 @@ impl ConfigNode {
 
 	    let weeks: u32 = try!(self.get_config_val("weeks", None));
 
-	    // Set up row data for people
-	    for (who, cells) in &self.data.borrow().people {
+        // Get start time for the period to allocate.  Assume that everything
+        // prior to this has been committed.
+        let start: ChartTime = 
+                try!(self.get_config_val("today", Some(ChartTime::new("1").unwrap())));
 
-	        let mut row = TemplateRow::new(0, 0, &who);
-			for val in &cells.get_weekly_numbers(weeks)	{
-				row.add_cell(*val as f32 / 4.0);
+        //let end: ChartTime = ChartTime::new(&format!("{}", weeks+1)).unwrap();
+
+        // Work out which is the start week.
+        let start_week = start.get_quarter() / 20;
+
+        // Set up row data for people
+        for (who, cells) in &self.data.borrow().people {
+
+            let mut row = TemplateRow::new(0, 0, &who);
+            let mut count = 0;
+            for val in &cells.get_weekly_numbers(weeks) {
+				row.add_cell(*val as f32 / 4.0, count == start_week);
+                count += 1;
 			}
 			row.set_left(cells.count() as f32 / 4.0);
 	        context.add_row(row);

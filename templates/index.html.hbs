@@ -4,6 +4,12 @@
     <meta charset="utf-8" />
     <title>Planner Demo</title>
     <style>
+.datagrid table thead th.start { border-left:2px solid red; }
+.datagrid table tbody td.start { border-left:2px solid red; }
+
+.datagrid table thead th.border { border-left:2px solid black; }
+.datagrid table tbody td.border { border-left:2px solid black; }
+
 .datagrid table { border-collapse: collapse; text-align: left; width: 100%; } 
 .datagrid {font: normal 12px/150% Arial, Helvetica, sans-serif; background: #fff; overflow: hidden; border: 1px solid #A65B1A; -webkit-border-radius: 3px; -moz-border-radius: 3px; border-radius: 3px; }
 .datagrid table td, .datagrid table th { padding: 3px 2px; }
@@ -25,6 +31,7 @@ th.grid { text-align: center; width:2em; }
 
 td.numbers { text-align: right; font-family: monospace; }
 th.numbers { text-align: right; width:5em; }
+
     </style>
   </head>
 <body>
@@ -32,14 +39,14 @@ th.numbers { text-align: right; width:5em; }
     <table class="fixed">
         <thead>
             <tr>
+                <th class="numbers">Who</th>
                 <th>What</th>
                 <th>Notes</th>
-                <th class="numbers">Who</th>
-                <th class="numbers">Plan</th>
+                <th class="numbers border">Plan</th>
                 <th class="numbers">Done</th>
                 <th class="numbers">Left</th>
                 {{#each cell_headers}}
-                    <th class="grid">{{this}}</th>
+                    <th class="{{this.0}}">{{this.1}}</th>
                 {{/each}}
             </tr>
         </thead>
@@ -50,14 +57,14 @@ th.numbers { text-align: right; width:5em; }
             {{else}}
             <tr>
             {{/if}}
+                <td class="numbers">{{row.who}}</td>
                 <td>{{{row.what}}}</td>
                 <td>{{{row.notes_html}}}</td>
-                <td class="numbers">{{row.who}}</td>
-                <td class="numbers">{{{row.plan}}}</td>
+                <td class="numbers border">{{{row.plan}}}</td>
                 <td class="numbers">{{{row.done}}}</td>
                 <td class="numbers">{{{row.left}}}</td>
                 {{#each row.cells as |c|}}
-                    <td class="grid">{{{c}}}</td>
+                    <td class="{{c.0}}">{{{c.1}}}</td>
                 {{/each}}
             </tr>
         {{/each}}
