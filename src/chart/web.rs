@@ -15,23 +15,29 @@ use super::ConfigNode;
 pub struct TemplateRow {
     what: String,
     who: String,
+    line_num: u32,
     done: String,
     left: String,
     even: bool,
+    notes: Vec<String>,
+    notes_html: String,
     cells: Vec<String>
 }
 
 impl TemplateRow {
-    pub fn new(indent: u32, name: &str) -> TemplateRow {
+    pub fn new(indent: u32, line_num: u32, name: &str) -> TemplateRow {
         TemplateRow {
             what: format!("{}{}", 
                           format!("{:width$}", " ", width = (indent*3) as usize), 
                           name).replace(" ", "&nbsp;"),
             who: "".to_string(),
             done: " ".to_string(),
+            line_num: line_num,
             left: " ".to_string(),
             even: false,
-            cells: Vec::new()
+            cells: Vec::new(),
+            notes: Vec::new(),
+            notes_html: String::new()
         }
     }
 
@@ -52,12 +58,33 @@ impl TemplateRow {
         self.cells.push(TemplateRow::format_f32(val));
     }
 
+    pub fn add_note(&mut self,  val: &str) {
+        self.notes.push(val.to_string());
+    }
+
     pub fn set_done(&mut self, done: f32) {
         self.done = TemplateRow::format_f32(done);
     }
 
     pub fn set_left(&mut self, left: f32) {
         self.left = TemplateRow::format_f32(left);
+    }
+
+    fn prepare_html(&mut self) {
+
+        self.notes_html = String::new();
+        if self.notes.len() == 0 {
+            return;
+        }
+
+        self.notes_html.push_str(&format!("Node at line {}", self.line_num));
+
+        for note in &self.notes {
+            // @@@ Improve formatting on multi-line notes
+
+            self.notes_html.push_str("<br>");
+            self.notes_html.push_str(&note);
+        }
     }
 }
 
@@ -80,6 +107,12 @@ pub struct TemplateContext {
         row.even = self.rows.len() % 2 == 1;
         self.rows.push(row);
     }
+
+    fn prepare_html(&mut self) {
+        for row in &mut self.rows {
+            row.prepare_html();
+        }
+    }
  }
 
 
@@ -89,6 +122,9 @@ fn generate_chart_html(root: &mut ConfigNode) -> Result<Template, String> {
     let weeks: u32 = try!(root.get_config_val("weeks", None));
     let mut context = TemplateContext::new(weeks);
     try!(root.display_gantt(&mut context));
+
+    // Do any required preparation before rendering
+    context.prepare_html();
 
     Ok(Template::render("index", &context))
 }

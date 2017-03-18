@@ -33,6 +33,7 @@ th.numbers { text-align: right; width:5em; }
         <thead>
             <tr>
                 <th>What</th>
+                <th>Notes</th>
                 <th class="numbers">Who</th>
                 <th class="numbers">Done</th>
                 <th class="numbers">Left</th>
@@ -49,6 +50,7 @@ th.numbers { text-align: right; width:5em; }
             <tr>
             {{/if}}
                 <td>{{{row.what}}}</td>
+                <td>{{{row.notes_html}}}</td>
                 <td class="numbers">{{row.who}}</td>
                 <td class="numbers">{{{row.done}}}</td>
                 <td class="numbers">{{{row.left}}}</td>

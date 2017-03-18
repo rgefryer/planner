@@ -145,6 +145,9 @@ impl ConfigNode {
 		attr_hash
 	}
 
+    /// Get a copy of the attributes on the [chart] node
+    ///
+    /// This must only be called on the root node.
 	pub fn get_global_config(&self) -> HashMap<String, String> {
 		match self.find_child_with_name("[chart]") {
 			None => HashMap::new(),
@@ -179,6 +182,8 @@ impl ConfigNode {
 	}
 
 	/// Get a configuration value
+    ///
+    /// This must only be called on the root node.
 	pub fn get_config_val<T>(&self, key: &str, default: Option<T>)
 			-> Result<T, String> 
 		where T: FromStr, 
@@ -188,6 +193,7 @@ impl ConfigNode {
 		let global_hash = self.get_global_config();
 
 		// Read in resource information ([people])
+        println!("line_num: {}", self.line_num);
 		match global_hash.get(key) {
 			Some(k) => {
 				match k.parse::<T>() {
@@ -276,7 +282,7 @@ impl ConfigNode {
 			-> Result<(), String> {
 
 		// If there's no planned ressource against this node, do nothing.
-		let weeks: u32 = try!(self.get_config_val("weeks", None));
+		let weeks: u32 = try!(root.get_config_val("weeks", None));
 		let days_in_plan: Duration;
 		match self.get_plan(&ChartTime::new(&format!("{}", weeks+1)).unwrap(), 
 											 &Duration::new_days(weeks as f32 * 5.0)) {
@@ -338,11 +344,41 @@ impl ConfigNode {
 		let start: ChartTime = 
 				try!(root.get_config_val("today", Some(ChartTime::new("1").unwrap())));
 
-		// Assume a spread allocation
-		// @@@
+        // Get allocation type
+        match self.get_resourcing_strategy() {
+            Ok(Some(ResourcingStrategy::Management)) => {
+                // @@@ Implement it!
+                self.add_note(&"ResourcingStrategy::Management not implemented!".to_string());
+            },
+            Ok(Some(ResourcingStrategy::SmearProRata)) => {
+                // @@@ Implement it!
+                self.add_note(&"ResourcingStrategy::SmearProRata not implemented!".to_string());
+            }
+            Ok(Some(ResourcingStrategy::SmearRemaining)) => {
+                // @@@ Implement it!
+                self.add_note(&"ResourcingStrategy::SmearRemaining not implemented!".to_string());
+            }
+            Ok(Some(ResourcingStrategy::FrontLoad)) => {
+                // @@@ Implement it!
+                self.add_note(&"ResourcingStrategy::FrontLoad not implemented!".to_string());
+            }
+            Ok(Some(ResourcingStrategy::BackLoad)) => {
+                // @@@ Implement it!
+                self.add_note(&"ResourcingStrategy::BackLoad not implemented!".to_string());
+            }
+            Ok(Some(ResourcingStrategy::ProdSFR)) => {
+                // @@@ Implement it!
+                self.add_note(&"ResourcingStrategy::ProdSFR not implemented!".to_string());
+            }
+            Ok(None) => {
+                self.add_note(&"This task needs a ResourcingStrategy".to_string());
+            },
+            Err(e) => {
+                self.add_note(&format!("Unrecognised ResourcingStrategy: {}", e));
+            },
+        };
 
-		Ok(())
-
+		return Ok(());
 	}
 
 	/// Add a note to be displayed alongside this cell
@@ -411,11 +447,15 @@ impl ConfigNode {
 	    let weeks: u32 = try!(root.get_config_val("weeks", None));
 
 	    // Set up row data for self
-        let mut row = TemplateRow::new(self.level, &self.name);
+        let mut row = TemplateRow::new(self.level, self.line_num, &self.name);
 		for val in &self.cells.get_weekly_numbers(weeks)	{
 			row.add_cell(*val as f32 / 4.0);
 		}
 		row.set_done(self.cells.count() as f32 / 4.0);
+
+        for n in self.notes.borrow().iter() {
+            row.add_note(n);
+        }
 
 		let valid_who: Vec<String> = root.people.keys()
 		                                        .map(|x| x.clone())
@@ -452,7 +492,7 @@ impl ConfigNode {
 	    // Set up row data for people
 	    for (who, cells) in &self.people {
 
-	        let mut row = TemplateRow::new(0, &who);
+	        let mut row = TemplateRow::new(0, 0, &who);
 			for val in &cells.get_weekly_numbers(weeks)	{
 				row.add_cell(*val as f32 / 4.0);
 			}
