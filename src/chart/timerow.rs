@@ -185,15 +185,15 @@ impl ChartTimeRow {
 	  	let mut last_transfer: Option<u32> = None;
 
 		for cell in range {
-	  		if self.is_set(cell) && !dest.is_set(cell) {
-	  			to_allocate -= 1;
-	  			self.unset(cell);
-	  			dest.set(cell);
-	  			last_transfer = Some(cell);
+  			if to_allocate == 0 {
+  				break;
+  			}
 
-	  			if to_allocate == 0 {
-	  				break;
-	  			}
+            if self.is_set(cell) && !dest.is_set(cell) {
+                to_allocate -= 1;
+                self.unset(cell);
+                dest.set(cell);
+                last_transfer = Some(cell);
 	  		}
 		}
 	  	

@@ -17,6 +17,7 @@ pub struct TemplateRow {
     line_num: u32,
     done: String,
     left: String,
+    plan: String,
     even: bool,
     notes: Vec<String>,
     notes_html: String,
@@ -39,6 +40,7 @@ impl TemplateRow {
             done: " ".to_string(),
             line_num: line_num,
             left: " ".to_string(),
+            plan: " ".to_string(),
             even: false,
             cells: Vec::new(),
             notes: Vec::new(),
@@ -73,6 +75,10 @@ impl TemplateRow {
 
     pub fn set_left(&mut self, left: f32) {
         self.left = TemplateRow::format_f32(left);
+    }
+
+    pub fn set_plan(&mut self, plan: f32) {
+        self.plan = TemplateRow::format_f32(plan);
     }
 
     fn prepare_html(&mut self) {

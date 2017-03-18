@@ -35,6 +35,7 @@ th.numbers { text-align: right; width:5em; }
                 <th>What</th>
                 <th>Notes</th>
                 <th class="numbers">Who</th>
+                <th class="numbers">Plan</th>
                 <th class="numbers">Done</th>
                 <th class="numbers">Left</th>
                 {{#each cell_headers}}
@@ -52,6 +53,7 @@ th.numbers { text-align: right; width:5em; }
                 <td>{{{row.what}}}</td>
                 <td>{{{row.notes_html}}}</td>
                 <td class="numbers">{{row.who}}</td>
+                <td class="numbers">{{{row.plan}}}</td>
                 <td class="numbers">{{{row.done}}}</td>
                 <td class="numbers">{{{row.left}}}</td>
                 {{#each row.cells as |c|}}
