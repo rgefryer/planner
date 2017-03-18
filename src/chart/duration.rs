@@ -1,10 +1,47 @@
+use std::cmp::Ordering;
+use std::ops::{ Add, Sub };
+
 /// Time period
 ///
 /// Can be accessed equally as days (f32) or
 /// quarter-days (i32).
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Eq, Copy, Clone)]
 pub struct Duration {
 	quarters: i32
+}
+
+impl Add for Duration {
+    type Output = Duration;
+
+    fn add(self, other: Duration) -> Duration {
+        Duration { quarters: self.quarters + other.quarters }
+    }
+}
+
+impl Sub for Duration {
+    type Output = Duration;
+
+    fn sub(self, other: Duration) -> Duration {
+        Duration { quarters: self.quarters - other.quarters }
+    }
+}
+
+impl PartialOrd for Duration {
+    fn partial_cmp(&self, other: &Duration) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Duration {
+    fn cmp(&self, other: &Duration) -> Ordering {
+        self.quarters.cmp(&other.quarters)
+    }
+}
+
+impl PartialEq for Duration {
+    fn eq(&self, other: &Duration) -> bool {
+        self.quarters == other.quarters
+    }
 }
 
 impl Duration {
@@ -17,6 +54,14 @@ impl Duration {
 	/// Create a Duration from a number of quarters
 	pub fn new_quarters(quarters: i32) -> Duration {
 		Duration { quarters: quarters}
+	}
+
+	pub fn is_zero(&self) -> bool {
+		self.quarters == 0
+	}
+
+	pub fn is_negative(&self) -> bool {
+		self.quarters < 0
 	}
 
 	/// Create a Duration from a string

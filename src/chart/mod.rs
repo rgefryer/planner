@@ -1,10 +1,15 @@
 #![allow(dead_code)]
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
 mod duration;
 mod timerow;
 mod readfile;
 mod nodes;
 mod file;
 mod time;
+mod web;
 
 #[cfg(test)]
 mod tests;
@@ -14,6 +19,9 @@ pub use self::nodes::ConfigNode;
 pub use self::duration::*;
 pub use self::time::*;
 pub use self::timerow::*;
+
+#[cfg(not(test))]
+pub use self::web::serve_web;
 
 /// Strategy for scheduling child nodes
 #[derive(Debug, Eq, PartialEq)]
@@ -75,3 +83,26 @@ pub enum ResourcingStrategy {
 
 }
 
+pub fn generate_chart_nodes() -> Result<Rc<RefCell<ConfigNode>>, String> {
+
+	// Read in the config file
+    let mut f = try!(read_config(&("config.txt".to_string())));
+
+    // Generate the config nodes
+    let rc_root = Rc::new(RefCell::new(ConfigNode::new("root", 0, 0, 0)));
+
+    // Isolate borrowing root, so that we can return rc_root
+    {
+    	let mut root = rc_root.borrow_mut();
+    	try!(root.consume_config(Some(&rc_root), &mut f));
+    	println!("Read {} nodes", root.count_nodes());
+
+    	// Set up the resource information
+    	try!(root.fill_in_gantt());
+
+    	// Display the gantt chart
+    	//try!(root.display_gantt());
+    }
+
+	Ok(rc_root)
+}

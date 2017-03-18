@@ -1,5 +1,6 @@
 use super::duration::*;
 use std::cmp::Ordering;
+use std::str::FromStr;
 
 #[derive(Debug, Eq, Copy, Clone)]
 pub struct ChartTime {
@@ -24,6 +25,14 @@ impl PartialEq for ChartTime {
     fn eq(&self, other: &ChartTime) -> bool {
         self.get_quarter() == other.get_quarter()
     }
+}
+
+impl FromStr for ChartTime {
+	type Err = String;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		ChartTime::new(s)
+	}	
 }
 
 impl ChartTime {

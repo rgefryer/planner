@@ -11,6 +11,7 @@ use super::time::*;
 use super::timerow::*;
 use super::SchedulingStrategy;
 use super::ResourcingStrategy;
+use super::web::*;
 
 #[derive(Debug)]
 pub struct ConfigNode {
@@ -24,8 +25,14 @@ pub struct ConfigNode {
 
 	parent: Option<Weak<RefCell<ConfigNode>>>, 
 
+	// People are only defined on the root node
+	people: HashMap<String, ChartTimeRow>,
+
 	// Cells are only used on leaf nodes
 	cells: ChartTimeRow,
+
+	// Notes are problems to display on the chart
+	notes: RefCell<Vec<String>>
 }
 
 impl ConfigNode {
@@ -39,7 +46,9 @@ impl ConfigNode {
 					 attributes: HashMap::new(), 
 					 children: Vec::new(),
 					 parent: None,
-					 cells: ChartTimeRow::new() }
+					 people: HashMap::new(),
+					 cells: ChartTimeRow::new(),
+					 notes: RefCell::new(Vec::new()) }
 	}
 
 	fn create_attribute(&mut self, key: &str, val: &str) {
@@ -90,20 +99,26 @@ impl ConfigNode {
 
 	}
 
-	pub fn get_inherited_attribute(&self, key: &str) -> Option<String> {
+	pub fn get_inherited_attribute<T>(&self, key: &str) -> Result<Option<T>, String>
+		where T: FromStr, 
+		      <T as FromStr>::Err: Display {
 
 		if self.attributes.contains_key(key) {
-			return Some(self.attributes[key].clone());
+			return self.attributes[key].parse::<T>()
+							.map_err(|e| format!("Problem parsing config {} on node at line {}: {}", 
+												 key, 
+												 self.line_num, 
+												 e.to_string()))
+							.map(|value| Some(value));
 		} else if self.level == 1 {
 			// There are no attributes on the root node.
-			return None;
-		}
-		else {
+			return Ok(None);
+		} else {
 			match self.parent {
-				None => None,
+				None => Ok(None),
 				Some(ref p) => {
 					match p.upgrade() {
-						None => None,
+						None => Ok(None),
 						Some(node) => node.borrow()
 										  .get_inherited_attribute(key)
 					}
@@ -111,6 +126,7 @@ impl ConfigNode {
 			}
 		}
 	}
+
 
 	/// Return true if this is a leaf node
 	pub fn is_leaf(&self) -> bool {
@@ -195,11 +211,21 @@ impl ConfigNode {
 		                                        .map(|x| x.clone())
 		                                        .collect();
 		for (start, duration) in self.get_commitments() {
-			let who = 
-				try!(self.get_who(&valid_who)
-			             .ok_or(format!("Node at line {} has \
-				        		      	 commitments but no owner", 
-				        		      	self.line_num)));
+			let who: String;
+			match self.get_who(&valid_who) {
+				Ok(Some(w)) => {
+					who = w;
+				},
+				Ok(None) => {
+					self.add_note("Task has commitments but no owner");
+					return Ok(());
+				},
+				Err(e) => {
+					self.add_note(&e);
+					continue;
+				}
+			}
+
 			match people_hash.get_mut(&who)
 			                 .unwrap()
 			                 .fill_transfer_to
@@ -211,16 +237,16 @@ impl ConfigNode {
 				(_, _, 0) => {
 					continue;
 				},
+
 				(_, ok, fail) => {
 					let mut err_string = String::new();
-					err_string.push_str(&format!("Unable to transfer resource \
-												 for node at line {}", 
-												 self.line_num));
+					err_string.push_str(&"Unable to transfer resource".to_string()); 
 					err_string.push_str(&format!("\n  start={:?}", start));
 					err_string.push_str(&format!("\n  duration={:?}", duration));
 					err_string.push_str(&format!("\n  transferred={:?}", ok));
 					err_string.push_str(&format!("\n  missed={:?}", fail));
-					return Err(err_string)
+					self.add_note(&err_string);
+					continue;
 				}
 			}
 		}
@@ -243,7 +269,105 @@ impl ConfigNode {
 		Ok(())
 	}
 
-	/// Set up gantt information in the chart
+	fn allocate_local_task_resource(&mut self, 
+									root: &ConfigNode, 
+									managed: bool,
+									people_hash: &mut HashMap<String, ChartTimeRow>) 
+			-> Result<(), String> {
+
+		// If there's no planned ressource against this node, do nothing.
+		let weeks: u32 = try!(self.get_config_val("weeks", None));
+		let days_in_plan: Duration;
+		match self.get_plan(&ChartTime::new(&format!("{}", weeks+1)).unwrap(), 
+											 &Duration::new_days(weeks as f32 * 5.0)) {
+			Ok(Some(d)) => {
+				days_in_plan = d;
+			},
+			Ok(None) => {
+				return Ok(());
+			},
+			Err(e) => {
+				self.add_note(&e);
+				return Ok(());
+			}
+		};
+
+		if days_in_plan.is_zero() {
+			return Ok(());
+		}
+
+		// If the managed state of this node doesn't match the "managed"
+		// criteria, then there's nothing to be done.
+		let non_managed: bool = try!(root.get_config_val("non-managed", Some(true)));
+		if managed == non_managed {
+			return Ok(());
+		}
+
+		// If there's no remaining work against this node, do nothing.
+		let days_in_chart = Duration::new_quarters(self.cells.count() as i32);
+		let days_to_allocate = days_in_plan - days_in_chart;
+		if days_to_allocate.is_negative() {
+			self.add_note("Work on this task exceeds the plan");
+			return Ok(());
+		}
+		if days_to_allocate.is_zero() {
+			return Ok(());
+		}
+
+		// If there's no owner against this node, do nothing
+		let valid_who: Vec<String> = people_hash.keys()
+		                                        .map(|x| x.clone())
+		                                        .collect();
+		let who: String;
+		match self.get_who(&valid_who) {
+			Ok(Some(w)) => {
+				who = w;
+			},
+			Ok(None) => {
+				self.add_note("This task needs allocating to someone");
+				return Ok(());
+			},
+			Err(e) => {
+				self.add_note(&e);
+				return Ok(());
+			}
+		};
+
+		// Get start time for the period to allocate.  Assume that everything
+		// prior to this has been committed.
+		let start: ChartTime = 
+				try!(root.get_config_val("today", Some(ChartTime::new("1").unwrap())));
+
+		// Assume a spread allocation
+		// @@@
+
+		Ok(())
+
+	}
+
+	/// Add a note to be displayed alongside this cell
+	fn add_note(&self, note: &str) {
+
+		self.notes.borrow_mut().push(note.to_string());
+	}
+
+	fn allocate_child_task_resource(&self, 
+									root:&ConfigNode, 
+									managed: bool, 
+									people_hash: &mut HashMap<String, ChartTimeRow>) 
+			-> Result<(), String> {
+
+		for child_rc in &self.children {
+			try!(child_rc.borrow_mut()
+						 .allocate_local_task_resource(root, managed, people_hash));
+			try!(child_rc.borrow()
+						 .allocate_child_task_resource(root, managed, people_hash));
+		}
+
+		Ok(())
+	}
+
+	/// Set up resource information in the chart
 	///
 	/// This is only called on the root node.
 	pub fn fill_in_gantt(&mut self) -> Result<(), String> {
@@ -256,36 +380,114 @@ impl ConfigNode {
 		try!(self.transfer_child_committed_resource(&mut people_hash));
 
 		// Handle all non-managed rows
+		let managed = true;
+		try!(self.allocate_child_task_resource(self, !managed, &mut people_hash));
 
 		// Handle Management
+		// @@@
 
 		// Handle all managed rows
+		// @@@
+
+		// Finally, store the people resources in the root_node
+		self.people = people_hash;
 
 		Ok(())
 	}
 
-	pub fn display_gantt(&self) -> Result<(), String> {
-		Err("display_gantt is not yet implemented".to_string())
+	/// Set up display data for this node and all children.
+	pub fn display_gantt_internal(&self, 
+								  root: &ConfigNode, 
+								  context: &mut TemplateContext) 
+			-> Result<(), String> {
+
+		// Ignore "special" nodes
+		for s in vec!["chart", "people", "rows"] {
+			if self.name == format!("[{}]", s) {
+				return Ok(());
+			}
+		}
+
+	    let weeks: u32 = try!(root.get_config_val("weeks", None));
+
+	    // Set up row data for self
+        let mut row = TemplateRow::new(self.level, &self.name);
+		for val in &self.cells.get_weekly_numbers(weeks)	{
+			row.add_cell(*val as f32 / 4.0);
+		}
+		row.set_done(self.cells.count() as f32 / 4.0);
+
+		let valid_who: Vec<String> = root.people.keys()
+		                                        .map(|x| x.clone())
+		                                        .collect();
+
+		match self.get_who(&valid_who) {
+			Ok(Some(who)) => {
+				row.set_who(&who);
+			},
+			Ok(None) => {},
+			Err(e) => {
+				self.add_note(&e);
+			}
+		};
+        context.add_row(row);
+
+	    // Set up row data for children
+		for child_rc in &self.children {
+	    	try!(child_rc.borrow_mut().display_gantt_internal(root, context));
+	    }
+	    
+	    Ok(())
+	}
+
+	/// Generate the data for displaying th gantt shart.
+	///
+	/// Sets up the resource rows, then recurses throught
+	/// the node hierarchy.
+	pub fn display_gantt(&mut self, context: &mut TemplateContext) 
+			-> Result<(), String> {
+
+	    let weeks: u32 = try!(self.get_config_val("weeks", None));
+
+	    // Set up row data for people
+	    for (who, cells) in &self.people {
+
+	        let mut row = TemplateRow::new(0, &who);
+			for val in &cells.get_weekly_numbers(weeks)	{
+				row.add_cell(*val as f32 / 4.0);
+			}
+			row.set_left(cells.count() as f32 / 4.0);
+	        context.add_row(row);
+	    }
+
+	    // Set up row data for nodes
+	    try!(self.display_gantt_internal(self, context));
+
+		//Err("display_gantt is not yet implemented".to_string())
+	    Ok(())
+
 	}
 
 	// Functions to derive resourcing information
 	// Derive Remaining and slip/gain
 	// Draw the Gantt!
 
+	fn augment_error(&self, err: String) -> String {
+		format!("Problem in node at line {}: {}", 
+				self.line_num, 
+				err.to_string())
+
+	}
+
 	/// Get the non-managed status for the tasktask.
 	///
 	/// Non-managed status is inheritable, and defaults
 	/// to false.     
-	pub fn get_non_managed(&self) -> bool {
+	pub fn get_non_managed(&self) -> Result<bool, String> {
 		match self.get_inherited_attribute("non-managed") {
-			Some(val) => {
-				if val == "true" {
-					true
-				} else {
-					false
-				}
-			},
-			None => false
+			Ok(Some(val)) => Ok(val),
+			Ok(None) => Ok(false),
+			Err(e) => Err(self.augment_error(e))
 		}
 	}
 
@@ -293,20 +495,16 @@ impl ConfigNode {
 	///
 	/// Latest end time is inheritable, and is
 	/// not defaulted.
-	pub fn get_latest_end(&self) -> Option<ChartTime> {
-		match self.get_inherited_attribute("latest-end") {
-			Some(ref time) => {
+	pub fn get_latest_end(&self) -> Result<Option<ChartTime>, String> {
+		match self.get_inherited_attribute::<String>("latest-end") {
+			Ok(Some(ref time)) => {
 				match ChartTime::new(time) {
-					Ok(ct) => Some(ct),
-					Err(e) => {
-						println!("Invalid end time in node at line {}: {}", 
-								 self.line_num, 
-								 e.to_string());
-						None
-					}
+					Ok(ct) => Ok(Some(ct)),
+					Err(e) => Err(self.augment_error(e))
 				}
-			},
-			None => None
+			}
+			Ok(None) => Ok(None),
+			Err(e) => Err(self.augment_error(e))
 		}
 	}
 
@@ -314,20 +512,16 @@ impl ConfigNode {
 	///
 	/// Earliest start time is inheritable, and is
 	/// not defaulted.
-	pub fn get_earliest_start(&self) -> Option<ChartTime> {
-		match self.get_inherited_attribute("earliest-start") {
-			Some(ref time) => {
+	pub fn get_earliest_start(&self) -> Result<Option<ChartTime>, String> {
+		match self.get_inherited_attribute::<String>("earliest-start") {
+			Ok(Some(ref time)) => {
 				match ChartTime::new(time) {
-					Ok(ct) => Some(ct),
-					Err(e) => {
-						println!("Invalid start time in node at line {}: {}", 
-								 self.line_num, 
-								 e.to_string());
-						None
-					}
+					Ok(ct) => Ok(Some(ct)),
+					Err(e) => Err(self.augment_error(e))
 				}
 			},
-			None => None
+			Ok(None) => Ok(None),
+			Err(e) => Err(self.augment_error(e))
 		}
 	}
 
@@ -372,31 +566,28 @@ impl ConfigNode {
 	///
 	/// The resourcing strategy is inheritable, and
 	/// there is no default.
-	pub fn get_resourcing_strategy(&self) -> Option<ResourcingStrategy> {
-		match self.get_inherited_attribute("resource") {
-			Some(resource) => {
+	pub fn get_resourcing_strategy(&self) -> Result<Option<ResourcingStrategy>, String> {
+		match self.get_inherited_attribute::<String>("resource") {
+			Ok(Some(resource)) => {
 				if resource == "management" {
-					Some(ResourcingStrategy::Management)
+					Ok(Some(ResourcingStrategy::Management))
 				} else if resource == "smearprorata" {
-					Some(ResourcingStrategy::SmearProRata)
+					Ok(Some(ResourcingStrategy::SmearProRata))
 				} else if resource == "smearremaining" {
-					Some(ResourcingStrategy::SmearRemaining)
+					Ok(Some(ResourcingStrategy::SmearRemaining))
 				} else if resource == "frontload" {
-					Some(ResourcingStrategy::FrontLoad)
+					Ok(Some(ResourcingStrategy::FrontLoad))
 				} else if resource == "backload" {
-					Some(ResourcingStrategy::BackLoad)
+					Ok(Some(ResourcingStrategy::BackLoad))
 				} else if resource == "prodsfr" {
-					Some(ResourcingStrategy::ProdSFR)
+					Ok(Some(ResourcingStrategy::ProdSFR))
 				} else {
-					println!("Invalid scheduling strategy in node at line {}", 
-							 self.line_num);
-					None
+					Err(self.augment_error(format!("Unrecognised resource, {}", resource)))
 				}
 			},
 
-			None => {
-				None
-			}
+			Ok(None) => Ok(None),
+			Err(e) => Err(self.augment_error(e))
 		}
 	}
 
@@ -446,7 +637,7 @@ impl ConfigNode {
 	/// pcy or pcm.  This function converts suffixed values into actual 
 	/// durations.
 	pub fn get_plan(&self, when: &ChartTime, time_in_chart: &Duration) 
-			-> Option<Duration> {
+			-> Result<Option<Duration>, String> {
 
 		let key = "plan";
 		let plan_str: String;
@@ -455,18 +646,22 @@ impl ConfigNode {
 		}
 		else if self.is_leaf() {
 
-			match self.get_inherited_attribute("default-plan") {
-				Some(val) => {
+			match self.get_inherited_attribute::<String>("default-plan") {
+				Ok(Some(val)) => {
 					plan_str = val.clone();
 				},
 
-				None => { 
-					return None; 
+				Ok(None) => { 
+					return Ok(None);
+				},
+
+				Err(e) => {
+					return Err(self.augment_error(e));					
 				}
 			};
 		}
 		else {
-			return None;
+			return Ok(None);
 		}
 
 		// If plan_str contains multiple values, use the "when" time to select
@@ -477,9 +672,8 @@ impl ConfigNode {
 		for val in v {
 			let v2: Vec<&str> = val.split(":").collect();
 			if v2.len() > 2 {
-				println!("Invalid plan part in node at line {}: {} has more \
-						  than 2 parts", self.line_num, val);
-				return None;
+				return Err(self.augment_error(format!("Invalid plan part, {} has more \
+						  than 2 parts", val)));
 			}
 			if v2.len() == 1 {
 				found = true;
@@ -488,9 +682,7 @@ impl ConfigNode {
 			}
 			match ChartTime::new(v2[0]) {
 				Err(e) => {
-					println!("Invalid plan part in node at line {}: {}", 
-							 self.line_num, e.to_string());
-					return None;
+					return Err(self.augment_error(e));
 				},
 				Ok(ref ct) => {
 					if ct > when {
@@ -503,18 +695,16 @@ impl ConfigNode {
 		}
 
 		if !found {
-			return None;
+			return Ok(None);
 		}
 
 		// So, we have a value in use_val.  Try to convert it to a duration.
 		match Duration::new_from_string(&use_val, time_in_chart) {
 			Err(e) => {
-				println!("Invalid plan in node at line {}: {}", 
-						 self.line_num, e);
-				None
+				Err(self.augment_error(e))
 			},
 			Ok(dur) => {
-				Some(dur)
+				Ok(Some(dur))
 			}
 		}
 	}
@@ -523,27 +713,28 @@ impl ConfigNode {
 	///
 	/// The owner can be inherited.  If this fails, the name of the
 	/// node is returned as an owner.
-	pub fn get_who(&self, valid: &Vec<String>) -> Option<String> {
+	pub fn get_who(&self, valid: &Vec<String>) -> Result<Option<String>, String> {
 
-		match self.get_inherited_attribute("who") {
-			Some(who) => {
+		match self.get_inherited_attribute::<String>("who") {
+			Ok(Some(who)) => {
 				if valid.contains(&who) {
-					return Some(who);
-				}
-				else {
-					println!("Invalid who in (or inherited by) node at \
-							  line {}", self.line_num);
-					return None;
+					return Ok(Some(who));
+				} else {
+					return Err(self.augment_error("Unrecognised \"who\"".to_string()));
 				}
 			},
 
-			None => {
+			Ok(None) => {
 				if valid.contains(&self.name) {
-					return Some(self.name.clone());
+					return Ok(Some(self.name.clone()));
 				}
 				else {
-					return None
+					return Ok(None)
 				}
+			},
+
+			Err(e) => {
+				return Err(self.augment_error(e));
 			}
 		};
 	}

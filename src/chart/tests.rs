@@ -241,16 +241,16 @@ fn nodes_test() {
 	let sibling = root_ref.get_node_at_line(9).unwrap().upgrade().unwrap();
 	  let rsl = root_ref.get_node_at_line(13).unwrap().upgrade().unwrap();
 	let sibling2 = root_ref.get_node_at_line(15).unwrap().upgrade().unwrap();
-	  let sibling2child = root_ref.get_node_at_line(17).unwrap().upgrade().unwrap();
+	  //let sibling2child = root_ref.get_node_at_line(17).unwrap().upgrade().unwrap();
 	    let sibling2grandchild = root_ref.get_node_at_line(18).unwrap().upgrade().unwrap();
 	let sibling3 = root_ref.get_node_at_line(20).unwrap().upgrade().unwrap();
-	let chart = root_ref.get_node_at_line(21).unwrap().upgrade().unwrap();
+	//let chart = root_ref.get_node_at_line(21).unwrap().upgrade().unwrap();
 	
 	assert_eq!(greatgrandchild.borrow().count_children(), 0);
-	assert_eq!(grandchild.borrow().get_inherited_attribute("plan").unwrap(), "5");
-	assert_eq!(grandchild.borrow().get_inherited_attribute("budget").unwrap(), "10");
-	assert_eq!(grandchild.borrow().get_inherited_attribute("who").unwrap(), "rsl");
-	assert_eq!(grandchild.borrow().get_inherited_attribute("who2"), None);
+	assert_eq!(grandchild.borrow().get_inherited_attribute::<String>("plan").unwrap().unwrap(), "5");
+	assert_eq!(grandchild.borrow().get_inherited_attribute::<String>("budget").unwrap().unwrap(), "10");
+	assert_eq!(grandchild.borrow().get_inherited_attribute::<String>("who").unwrap().unwrap(), "rsl");
+	assert_eq!(grandchild.borrow().get_inherited_attribute::<String>("who2").unwrap(), None);
 
 	// Test budget retrieval on nodes that do, and don't, include one,
 	assert_eq!(grandchild.borrow().get_budget(), None);
@@ -262,10 +262,10 @@ fn nodes_test() {
 	// - No value is available
 	// - Local name will serve as value
 	let valid_who = vec!["rsl".to_string(), "rf".to_string()];
-	assert_eq!(grandchild.borrow().get_who(&valid_who).unwrap(), "rsl");
-	assert_eq!(greatgrandchild.borrow().get_who(&valid_who).unwrap(), "rsl");
-	assert_eq!(child.borrow().get_who(&valid_who), None);
-	assert_eq!(rsl.borrow().get_who(&valid_who).unwrap(), "rsl");
+	assert_eq!(grandchild.borrow().get_who(&valid_who).unwrap().unwrap(), "rsl");
+	assert_eq!(greatgrandchild.borrow().get_who(&valid_who).unwrap().unwrap(), "rsl");
+	assert_eq!(child.borrow().get_who(&valid_who).unwrap(), None);
+	assert_eq!(rsl.borrow().get_who(&valid_who).unwrap().unwrap(), "rsl");
 
 	// Test "plan" retrieval on nodes where:
 	// - Local value is available
@@ -278,18 +278,18 @@ fn nodes_test() {
 	// - Handling of intermediate plan values
 	let two_weeks = Duration::new_days(10.0f32);
 	let when = ChartTime::new("1").unwrap();
-	assert_eq!(sibling.borrow().get_plan(&when, &two_weeks).unwrap().quarters(), 20);
-	assert_eq!(greatgrandchild.borrow().get_plan(&when, &two_weeks).unwrap().quarters(), 12);
-	assert_eq!(grandchild.borrow().get_plan(&when, &two_weeks), None);
-	assert_eq!(sibling2.borrow().get_plan(&when, &two_weeks), None);
-	assert_eq!(sibling2grandchild.borrow().get_plan(&when, &two_weeks).unwrap().quarters(), 8);
-	assert_eq!(sibling2grandchild.borrow().get_plan(&when, &two_weeks).unwrap().quarters(), 8);
+	assert_eq!(sibling.borrow().get_plan(&when, &two_weeks).unwrap().unwrap().quarters(), 20);
+	assert_eq!(greatgrandchild.borrow().get_plan(&when, &two_weeks).unwrap().unwrap().quarters(), 12);
+	assert_eq!(grandchild.borrow().get_plan(&when, &two_weeks).unwrap(), None);
+	assert_eq!(sibling2.borrow().get_plan(&when, &two_weeks).unwrap(), None);
+	assert_eq!(sibling2grandchild.borrow().get_plan(&when, &two_weeks).unwrap().unwrap().quarters(), 8);
+	assert_eq!(sibling2grandchild.borrow().get_plan(&when, &two_weeks).unwrap().unwrap().quarters(), 8);
 
-	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("1").unwrap(), &two_weeks).unwrap().quarters(), 20);
-	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("2").unwrap(), &two_weeks).unwrap().quarters(), 40);
-	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("2.3").unwrap(), &two_weeks).unwrap().quarters(), 40);
-	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("3").unwrap(), &two_weeks).unwrap().quarters(), 80);
-	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("4").unwrap(), &two_weeks).unwrap().quarters(), 80);
+	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("1").unwrap(), &two_weeks).unwrap().unwrap().quarters(), 20);
+	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("2").unwrap(), &two_weeks).unwrap().unwrap().quarters(), 40);
+	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("2.3").unwrap(), &two_weeks).unwrap().unwrap().quarters(), 40);
+	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("3").unwrap(), &two_weeks).unwrap().unwrap().quarters(), 80);
+	assert_eq!(sibling3.borrow().get_plan(&ChartTime::new("4").unwrap(), &two_weeks).unwrap().unwrap().quarters(), 80);
 
 	// Test "schedule" retrieval on nodes where:
 	// - Local value is serial
@@ -303,9 +303,9 @@ fn nodes_test() {
 	// - No value is available
 	// - Local value is set
 	// - Value is inherited
-	assert_eq!(sibling2grandchild.borrow().get_resourcing_strategy(), None);
-	assert_eq!(child.borrow().get_resourcing_strategy().unwrap(), ResourcingStrategy::SmearProRata);
-	assert_eq!(greatgrandchild.borrow().get_resourcing_strategy().unwrap(), ResourcingStrategy::SmearRemaining);
+	assert_eq!(sibling2grandchild.borrow().get_resourcing_strategy().unwrap(), None);
+	assert_eq!(child.borrow().get_resourcing_strategy().unwrap().unwrap(), ResourcingStrategy::SmearProRata);
+	assert_eq!(greatgrandchild.borrow().get_resourcing_strategy().unwrap().unwrap(), ResourcingStrategy::SmearRemaining);
 
 	// Test commitment retrieval on nodes where:
 	// - There are no commitments
@@ -322,26 +322,26 @@ fn nodes_test() {
 	// - There is a local value
 	// - There is an inherited value
 	// - There is no value
-	assert_eq!(grandchild.borrow().get_earliest_start().unwrap().get_quarter(), 28);
-	assert_eq!(greatgrandchild.borrow().get_earliest_start().unwrap().get_quarter(), 28);
-	assert_eq!(child.borrow().get_earliest_start(), None);
+	assert_eq!(grandchild.borrow().get_earliest_start().unwrap().unwrap().get_quarter(), 28);
+	assert_eq!(greatgrandchild.borrow().get_earliest_start().unwrap().unwrap().get_quarter(), 28);
+	assert_eq!(child.borrow().get_earliest_start().unwrap(), None);
 
 	// Test latest-end retrieval on nodes where:
 	// - There is a local value
 	// - There is an inherited value
 	// - There is no value
-	assert_eq!(grandchild.borrow().get_latest_end().unwrap().get_quarter(), 34);
-	assert_eq!(greatgrandchild.borrow().get_latest_end().unwrap().get_quarter(), 34);
-	assert_eq!(child.borrow().get_latest_end(), None);
+	assert_eq!(grandchild.borrow().get_latest_end().unwrap().unwrap().get_quarter(), 34);
+	assert_eq!(greatgrandchild.borrow().get_latest_end().unwrap().unwrap().get_quarter(), 34);
+	assert_eq!(child.borrow().get_latest_end().unwrap(), None);
 
 	// Test non-managed status retrieval on nodes where:
 	// - There is a local value
 	// - There is an inherited !value
 	// - There is no value
 	// Test non-managed status retrieval on nodes whersl:
-	assert_eq!(grandchild.borrow().get_non_managed(), true);
-	assert_eq!(greatgrandchild.borrow().get_non_managed(), true);
-	assert_eq!(child.borrow().get_non_managed(), false);
+	assert_eq!(grandchild.borrow().get_non_managed().unwrap(), true);
+	assert_eq!(greatgrandchild.borrow().get_non_managed().unwrap(), true);
+	assert_eq!(child.borrow().get_non_managed().unwrap(), false);
 
 	// Test find_child_with_name where:
 	// - The node exists
