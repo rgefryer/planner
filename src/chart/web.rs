@@ -21,6 +21,7 @@ pub struct TemplateRow {
     done: String,
     left: String,
     plan: String,
+    gain: String,
     even: bool,
     notes: Vec<String>,
     notes_html: String,
@@ -41,6 +42,7 @@ impl TemplateRow {
                           name).replace(" ", "&nbsp;"),
             who: "".to_string(),
             done: " ".to_string(),
+            gain: " ".to_string(),
             line_num: line_num,
             left: " ".to_string(),
             plan: " ".to_string(),
@@ -56,7 +58,7 @@ impl TemplateRow {
     }
 
     fn format_f32(val: f32) -> String {
-        if val < 0.01 {
+        if val.abs() < 0.01 {
             String::new()
         } else {
             format!("{:.2}", val).replace(".00", "&nbsp;&nbsp;&nbsp;")
@@ -81,6 +83,10 @@ impl TemplateRow {
 
     pub fn set_done(&mut self, done: f32) {
         self.done = TemplateRow::format_f32(done);
+    }
+
+    pub fn set_gain(&mut self, gain: f32) {
+        self.gain = TemplateRow::format_f32(gain);
     }
 
     pub fn set_left(&mut self, left: f32) {

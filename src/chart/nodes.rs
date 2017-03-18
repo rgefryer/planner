@@ -650,12 +650,16 @@ impl ConfigNode {
             count += 1;
         }
 
-		row.set_done(self.data.borrow().cells.count_range(0 .. start.get_quarter()) as f32 / 4.0);
+        let done = self.data.borrow().cells.count_range(0 .. start.get_quarter()) as f32 / 4.0;
+		row.set_done(done);
 
+        let mut plan_now = Duration::new_days(0.0);
         match self.get_plan(&ChartTime::new(&format!("{}", weeks+1)).unwrap(), 
                                              &Duration::new_days(weeks as f32 * 5.0)) {
             Ok(Some(d)) => {
+                plan_now = d;
                 row.set_plan(d.days());
+                row.set_left(d.days() - done);
             },
             Ok(None) => {}
             Err(e) => {
@@ -663,6 +667,20 @@ impl ConfigNode {
             }
         }
         
+        let mut plan_original = Duration::new_days(0.0);
+        match self.get_plan(&ChartTime::new(&"1".to_string()).unwrap(), 
+                                             &Duration::new_days(weeks as f32 * 5.0)) {
+            Ok(Some(d)) => {
+                plan_original = d;
+            },
+            Ok(None) => {}
+            Err(e) => {
+                self.add_note(&e);
+            }
+        }
+        
+        row.set_gain((plan_original - plan_now).days());
+
         for n in self.data.borrow().notes.iter() {
             row.add_note(n);
         }

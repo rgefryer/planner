@@ -189,7 +189,7 @@ EAS Prod SFRs
   - plan: 20
 
   rf
-  - plan: 10
+  - plan: 10, 2:12
 
 PRD 12345
 - budget: 90
