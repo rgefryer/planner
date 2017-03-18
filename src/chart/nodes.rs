@@ -272,10 +272,11 @@ impl ConfigNode {
 				}
 			}
 
+            let mut node_data = self.data.borrow_mut();
 			match people_hash.get_mut(&who)
 			                 .unwrap()
 			                 .fill_transfer_to
-			                 	(&mut self.data.borrow_mut().cells, 
+			                 	(&mut node_data.cells, 
 								 duration.quarters() as u32, 
 								 start.get_quarter() .. 
 								   (start.get_quarter() + 
@@ -291,7 +292,7 @@ impl ConfigNode {
 					err_string.push_str(&format!("\n  duration={:?}", duration));
 					err_string.push_str(&format!("\n  transferred={:?}", ok));
 					err_string.push_str(&format!("\n  missed={:?}", fail));
-					self.add_note(&err_string);
+					node_data.add_note(&err_string);
 					continue;
 				}
 			}
@@ -365,7 +366,7 @@ impl ConfigNode {
 		let days_in_chart = Duration::new_quarters(self.data.borrow().cells.count() as i32);
 		let days_to_allocate = days_in_plan - days_in_chart;
 		if days_to_allocate.is_negative() {
-			self.add_note("Work on this task exceeds the plan");
+			self.add_note(&format!("Over-committed by {} days; update plan", days_to_allocate.days() * -1.0));
 			return Ok(());
 		}
 		if days_to_allocate.is_zero() {
@@ -411,20 +412,21 @@ impl ConfigNode {
                 let time_per_quarter = days_in_plan.quarters() as f32 / (quarters_in_plan as f32);
 
                 // Work out the time to spend in the rest of the period
-                let mut quarters_remaining = quarters_in_plan - start.get_quarters();
+                let quarters_remaining = quarters_in_plan as i32 - start.get_quarter() as i32;
+                let mut time_to_spend = (quarters_remaining as f32 * time_per_quarter).ceil();
 
                 // Subtract any time already committed.
-                quarters_remaining -= self.data.borrow().cells.count_range(start.get_quarter() .. end.get_quarter())
+                time_to_spend -= self.data.borrow().cells.count_range(start.get_quarter() .. end.get_quarter()) as f32;
 
-                if quarters_remaining < 0 {
-                    self.add_note(&format!("Already committed by {}", quarters_remaining * -1));
+                if time_to_spend < -0.01 {
+                    self.add_note(&format!("Over-committed by {} days; update plan", time_to_spend * -1.0));
                 } else {
                     // Smear the remainder.
                     let mut node_data = self.data.borrow_mut();
                     match people_hash.get_mut(&who)
                                      .unwrap()
                                      .smear_transfer_to(&mut node_data.cells,
-                                                        quarters_remaining as u32,
+                                                        time_to_spend as u32,
                                                         start.get_quarter() .. end.get_quarter()) {
                         (_, _, unallocated) if unallocated != 0 => {
                             node_data.add_note(&format!("{} days did not fit", unallocated as f32 / 4.0))
@@ -917,6 +919,57 @@ impl ConfigNode {
 	}
 
 
+    pub fn plan_string_to_dur(&self, 
+                              plan_str: &String, 
+                              when: &ChartTime, 
+                              time_in_chart: &Duration) 
+            -> Result<Option<Duration>, String> {
+
+        // If plan_str contains multiple values, use the "when" time to select
+        // the value that applies.
+        let v: Vec<&str> = plan_str.split(", ").collect();
+        let mut use_val: &str = "";
+        let mut found = false;
+        for val in v {
+            let v2: Vec<&str> = val.split(":").collect();
+            if v2.len() > 2 {
+                return Err(self.augment_error(format!("Invalid plan part, {} has more \
+                          than 2 parts", val)));
+            }
+            if v2.len() == 1 {
+                found = true;
+                use_val = val;
+                continue;
+            }
+            match ChartTime::new(v2[0]) {
+                Err(e) => {
+                    return Err(self.augment_error(e));
+                },
+                Ok(ref ct) => {
+                    if ct > when {
+                        break
+                    }
+                    found = true;
+                    use_val = v2[1];
+                }
+            }
+        }
+
+        if !found {
+            return Ok(None);
+        }
+
+        // So, we have a value in use_val.  Try to convert it to a duration.
+        match Duration::new_from_string(&use_val, time_in_chart) {
+            Err(e) => {
+                Err(self.augment_error(e))
+            },
+            Ok(dur) => {
+                Ok(Some(dur))
+            }
+        }
+    }
+
 	/// Get the planned time for this task
 	///
 	/// The planned time cannot be inherited.  However, the default-plan
@@ -940,74 +993,46 @@ impl ConfigNode {
 	pub fn get_plan(&self, when: &ChartTime, time_in_chart: &Duration) 
 			-> Result<Option<Duration>, String> {
 
+        // Try to satisfy the request with local data
 		let key = "plan";
-		let plan_str: String;
 		if self.data.borrow().attributes.contains_key(key) {
-			plan_str = self.data.borrow().attributes[key].clone();
-		}
-		else if self.is_leaf() {
-
-			match self.get_inherited_attribute::<String>("default-plan") {
-				Ok(Some(val)) => {
-					plan_str = val.clone();
-				},
-
-				Ok(None) => { 
-					return Ok(None);
-				},
-
-				Err(e) => {
-					return Err(self.augment_error(e));					
-				}
-			};
-		}
-		else {
-			return Ok(None);
+            match self.plan_string_to_dur(
+                              &self.data.borrow().attributes[key], 
+                              when, 
+                              time_in_chart) {
+                Ok(Some(d)) => {
+                    return Ok(Some(d));
+                },
+                Ok(None) => {},
+                Err(e) => {
+                    return Err(e);
+                }
+            };
 		}
 
-		// If plan_str contains multiple values, use the "when" time to select
-		// the value that applies.
-		let v: Vec<&str> = plan_str.split(", ").collect();
-		let mut use_val: &str = "";
-		let mut found = false;
-		for val in v {
-			let v2: Vec<&str> = val.split(":").collect();
-			if v2.len() > 2 {
-				return Err(self.augment_error(format!("Invalid plan part, {} has more \
-						  than 2 parts", val)));
-			}
-			if v2.len() == 1 {
-				found = true;
-				use_val = val;
-				continue;
-			}
-			match ChartTime::new(v2[0]) {
-				Err(e) => {
-					return Err(self.augment_error(e));
-				},
-				Ok(ref ct) => {
-					if ct > when {
-						break
-					}
-					found = true;
-					use_val = v2[1];
-				}
-			}
-		}
+        // Local data didn't cut it.  Next step is to look for a 
+        // default we can inherit.  But first, bail out if this
+        // is not a leaf node.
+        if !self.is_leaf() {
+            return Ok(None);
+        }
 
-		if !found {
-			return Ok(None);
-		}
+        match self.get_inherited_attribute::<String>("default-plan") {
+            Ok(Some(val)) => {
+                return self.plan_string_to_dur(
+                              &val, 
+                              when, 
+                              time_in_chart);
+            },
 
-		// So, we have a value in use_val.  Try to convert it to a duration.
-		match Duration::new_from_string(&use_val, time_in_chart) {
-			Err(e) => {
-				Err(self.augment_error(e))
-			},
-			Ok(dur) => {
-				Ok(Some(dur))
-			}
-		}
+            Ok(None) => { 
+                return Ok(None);
+            },
+
+            Err(e) => {
+                return Err(e);                  
+            }
+        };
 	}
 
 	/// Get the owner of this task

@@ -122,7 +122,7 @@ Holidays
 
   rf
   - who: rf
-  - plan: 35pcy
+  - plan: 35pcy, 2:8.5
   - C2.3.3: 2.5   # 2.5 days starting on the 3rd quarter of the 3rd day in the 2nd week
   - C6.2: 1
   - C4: 5
@@ -153,6 +153,7 @@ Overheads
     rf    # If there's no "who:", use the row name
     rsl
     bdh
+    - plan: 2:3.5
     - C2.3.3: 3.5
     jw2
     bg5
@@ -179,6 +180,7 @@ Overheads
   - budget: 30
   - plan: 30
   - resource: management
+  - C1:4
 
 EAS Prod SFRs
 - budget: 30

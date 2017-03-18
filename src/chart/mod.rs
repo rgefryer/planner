@@ -69,7 +69,7 @@ pub enum ResourcingStrategy {
 
 	/// Allocate all of the plan asap.
 	///
-	/// This is typically used for task work.  It can only
+	/// This is typically used for PRD work.  It can only
 	/// be scheduled after the smeared resources.
 	FrontLoad,
 
