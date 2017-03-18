@@ -117,7 +117,7 @@
 Holidays
 - budget: 50
 - schedule: parallel
-- resource: spread  # Uncommitted resource is spread equally across the remaining time, before scheduling other tasks
+- resource: smearremaining
 - non-managed: true # No management resource is spent on people that are on holiday
 
   rf
@@ -147,11 +147,12 @@ Overheads
 
   Education/illness
   - default-plan: 4pcy   # Number of days per person per calendar year
+  - resource: smearprorata
 
     rf    # If there's no "who:", use the row name
     rsl
     bdh
-    - C1.3.3: 2.5
+    - C2.3.3: 3.5
     jw2
     bg5
 
@@ -159,6 +160,7 @@ Overheads
   - budget: 5
   - schedule: parallel
   - non-managed: true
+  - default-plan: 1
 
     rf
     - C5.5: 1
@@ -169,6 +171,7 @@ Overheads
     jw2
     - C5.5: 1
     bg5
+    - plan: 0
 
 EAS Prod SFRs
 - budget: 30
@@ -184,6 +187,8 @@ EAS Prod SFRs
 PRD 12345
 - budget: 90
 - schedule: series
+- who: rsl
+- resource: frontload
 
   DCUT
   - plan: 30
@@ -191,10 +196,11 @@ PRD 12345
   FV
   - plan: 10  # overridden by plan for sub-tasks
   - schedule: parallel
+  - who: bg5
 
     Test
     - who: bg5
-      - plan: 6
+    - plan: 6
     Fix
     - who: jw2
     - plan: 6

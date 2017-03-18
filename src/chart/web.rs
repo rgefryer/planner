@@ -10,7 +10,6 @@ use super::generate_chart_nodes;
 #[cfg(not(test))]
 use super::ConfigNode;
 
-
 #[derive(Serialize)]
 pub struct TemplateRow {
     what: String,
@@ -23,6 +22,12 @@ pub struct TemplateRow {
     notes_html: String,
     cells: Vec<String>
 }
+
+// @@@ Display "plan", "gain"
+// @@@ Personal daily spreadsheet
+// @@@ Display "from-now", omitting completed tasks
+// @@@ Display individual PRDs
+// @@@ Display budgets only
 
 impl TemplateRow {
     pub fn new(indent: u32, line_num: u32, name: &str) -> TemplateRow {
@@ -144,9 +149,6 @@ fn generate_error_html(err: &str) -> Template {
 #[cfg(not(test))]
 #[get("/")]
 fn index() -> Template {
-
-//pub fn generate_chart_nodes() -> Result<Rc<RefCell<ConfigNode>>, String> {
-
 
     match generate_chart_nodes() {
         Ok(rc_root) => {

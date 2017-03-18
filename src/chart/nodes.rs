@@ -14,16 +14,12 @@ use super::ResourcingStrategy;
 use super::web::*;
 
 #[derive(Debug)]
-pub struct ConfigNode {
+struct ConfigNodeData {
 	name: String,
 	line_num: u32,
 	indent: u32,
 	level: u32,  // Root node is level 0
 	attributes: HashMap<String, String>,
-
-	children: Vec<Rc<RefCell<ConfigNode>>>,
-
-	parent: Option<Weak<RefCell<ConfigNode>>>, 
 
 	// People are only defined on the root node
 	people: HashMap<String, ChartTimeRow>,
@@ -32,32 +28,56 @@ pub struct ConfigNode {
 	cells: ChartTimeRow,
 
 	// Notes are problems to display on the chart
-	notes: RefCell<Vec<String>>
+	notes: Vec<String>
+    
+}
+
+impl ConfigNodeData {
+    fn new(name: &str, level: u32, indent: u32, line_num: u32) 
+            -> ConfigNodeData {
+        ConfigNodeData { name: name.to_string(), 
+                         line_num: line_num,
+                         indent: indent, 
+                         level: level, 
+                         attributes: HashMap::new(), 
+                         people: HashMap::new(),
+                         cells: ChartTimeRow::new(),
+                         notes: Vec::new() }
+
+    }
+
+    fn add_note(&mut self, note: &str) {
+
+        self.notes.push(note.to_string());
+    }
+
+}
+
+#[derive(Debug)]
+pub struct ConfigNode {
+    children: Vec<Rc<RefCell<ConfigNode>>>,
+
+    parent: Option<Weak<RefCell<ConfigNode>>>, 
+
+    data: RefCell<ConfigNodeData>,
 }
 
 impl ConfigNode {
 
 	pub fn new(name: &str, level: u32, indent: u32, line_num: u32) 
 			-> ConfigNode {
-		ConfigNode { name: name.to_string(), 
-			         line_num: line_num,
-					 indent: indent, 
-					 level: level, 
-					 attributes: HashMap::new(), 
+		ConfigNode { data: RefCell::new(ConfigNodeData::new(name, level, indent, line_num)),
 					 children: Vec::new(),
-					 parent: None,
-					 people: HashMap::new(),
-					 cells: ChartTimeRow::new(),
-					 notes: RefCell::new(Vec::new()) }
+					 parent: None }
 	}
 
-	fn create_attribute(&mut self, key: &str, val: &str) {
-		self.attributes.insert(key.to_string(), val.to_string());
+	fn create_attribute(&self, key: &str, val: &str) {
+		self.data.borrow_mut().attributes.insert(key.to_string(), val.to_string());
 	}
 
 	fn new_child(&mut self, name: &str, indent: u32, line_num: u32) {
 		self.children.push(Rc::new(RefCell::new(ConfigNode::new(name, 
-																self.level+1,
+																self.data.borrow().level+1,
 																indent, 
 																line_num))));
 	}
@@ -85,11 +105,12 @@ impl ConfigNode {
 	pub fn find_child_with_name(&self, name: &str) 
 			-> Option<Weak<RefCell<ConfigNode>>> {
 
-		if self.name == name {
+		if self.data.borrow().name == name {
 			return None;
 		} else {
 			for child_rc in &self.children {
-				if child_rc.borrow().name == name {
+                let child_node = child_rc.borrow();
+				if child_node.data.borrow().name == name {
 					return Some(Rc::downgrade(child_rc));
 				} 
 			}
@@ -103,14 +124,14 @@ impl ConfigNode {
 		where T: FromStr, 
 		      <T as FromStr>::Err: Display {
 
-		if self.attributes.contains_key(key) {
-			return self.attributes[key].parse::<T>()
+		if self.data.borrow().attributes.contains_key(key) {
+			return self.data.borrow().attributes[key].parse::<T>()
 							.map_err(|e| format!("Problem parsing config {} on node at line {}: {}", 
 												 key, 
-												 self.line_num, 
+												 self.data.borrow().line_num, 
 												 e.to_string()))
 							.map(|value| Some(value));
-		} else if self.level == 1 {
+		} else if self.data.borrow().level == 1 {
 			// There are no attributes on the root node.
 			return Ok(None);
 		} else {
@@ -138,7 +159,7 @@ impl ConfigNode {
 	pub fn get_attribute_hash(&self) -> HashMap<String, String> {
 		let mut attr_hash = HashMap::new();
 
-		for (key, val) in self.attributes.iter() {
+		for (key, val) in self.data.borrow().attributes.iter() {
 			attr_hash.insert(key.clone(), val.clone());
 		}
 
@@ -168,10 +189,11 @@ impl ConfigNode {
 		
 		let weak_node = try!(self.find_child_with_name("[people]")
 				                 .ok_or("[people] node must exist"));
-		let node = weak_node.upgrade().unwrap();
+		let node_rc = weak_node.upgrade().unwrap();
+        let node = node_rc.borrow();
 
 		let mut people_hash = HashMap::new();
-		for (key, val) in node.borrow().attributes.iter() {
+		for (key, val) in node.data.borrow().attributes.iter() {
 			let ct = try!(ChartTimeRow::new_populate_range(val, weeks)
 				.map_err(|e| format!("Problem setting up resource for {}: {}",
 								     key, 
@@ -193,7 +215,6 @@ impl ConfigNode {
 		let global_hash = self.get_global_config();
 
 		// Read in resource information ([people])
-        println!("line_num: {}", self.line_num);
 		match global_hash.get(key) {
 			Some(k) => {
 				match k.parse::<T>() {
@@ -210,7 +231,7 @@ impl ConfigNode {
 	}
 
 	pub fn transfer_local_committed_resource
-			(&mut self, people_hash: &mut HashMap<String, ChartTimeRow>) 
+			(&self, people_hash: &mut HashMap<String, ChartTimeRow>) 
 			-> Result<(), String> {
 
 		let valid_who: Vec<String> = people_hash.keys()
@@ -235,7 +256,7 @@ impl ConfigNode {
 			match people_hash.get_mut(&who)
 			                 .unwrap()
 			                 .fill_transfer_to
-			                 	(&mut self.cells, 
+			                 	(&mut self.data.borrow_mut().cells, 
 								 duration.quarters() as u32, 
 								 start.get_quarter() .. 
 								   (start.get_quarter() + 
@@ -266,7 +287,7 @@ impl ConfigNode {
 
 		// Now do any child nodes
 		for child_rc in &self.children {
-			try!(child_rc.borrow_mut()
+			try!(child_rc.borrow()
 						 .transfer_local_committed_resource(people_hash));
 			try!(child_rc.borrow()
 						 .transfer_child_committed_resource(people_hash));
@@ -275,7 +296,7 @@ impl ConfigNode {
 		Ok(())
 	}
 
-	fn allocate_local_task_resource(&mut self, 
+	fn allocate_local_task_resource(&self, 
 									root: &ConfigNode, 
 									managed: bool,
 									people_hash: &mut HashMap<String, ChartTimeRow>) 
@@ -304,13 +325,25 @@ impl ConfigNode {
 
 		// If the managed state of this node doesn't match the "managed"
 		// criteria, then there's nothing to be done.
-		let non_managed: bool = try!(root.get_config_val("non-managed", Some(true)));
-		if managed == non_managed {
-			return Ok(());
-		}
+		match self.get_non_managed() {
+            Ok(true) => {
+                if managed {
+                    return Ok(());
+                }
+            }
+            Ok(false) => {
+                if !managed {
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                self.add_note(&e);
+                return Ok(());
+            }
+        };
 
 		// If there's no remaining work against this node, do nothing.
-		let days_in_chart = Duration::new_quarters(self.cells.count() as i32);
+		let days_in_chart = Duration::new_quarters(self.data.borrow().cells.count() as i32);
 		let days_to_allocate = days_in_plan - days_in_chart;
 		if days_to_allocate.is_negative() {
 			self.add_note("Work on this task exceeds the plan");
@@ -344,6 +377,9 @@ impl ConfigNode {
 		let start: ChartTime = 
 				try!(root.get_config_val("today", Some(ChartTime::new("1").unwrap())));
 
+        // Get end time for the chart
+        let end: ChartTime = ChartTime::new(&format!("{}", weeks+1)).unwrap();
+
         // Get allocation type
         match self.get_resourcing_strategy() {
             Ok(Some(ResourcingStrategy::Management)) => {
@@ -352,11 +388,24 @@ impl ConfigNode {
             },
             Ok(Some(ResourcingStrategy::SmearProRata)) => {
                 // @@@ Implement it!
+                // Note - days_to_allocate needs re-calc for pro-rata, don't use
+                // planned figure
                 self.add_note(&"ResourcingStrategy::SmearProRata not implemented!".to_string());
             }
             Ok(Some(ResourcingStrategy::SmearRemaining)) => {
                 // @@@ Implement it!
-                self.add_note(&"ResourcingStrategy::SmearRemaining not implemented!".to_string());
+                // self.add_note(&"ResourcingStrategy::SmearRemaining not implemented!".to_string());
+                let mut node_data = self.data.borrow_mut();
+                match people_hash.get_mut(&who)
+                                 .unwrap()
+                                 .smear_transfer_to(&mut node_data.cells,
+                                                    days_to_allocate.quarters() as u32,
+                                                    start.get_quarter() .. end.get_quarter()) {
+                    (_, _, unallocated) if unallocated != 0 => {
+                        node_data.add_note(&format!("{} days did not fit", unallocated as f32 / 4.0))
+                    },
+                    _ => {}
+                };
             }
             Ok(Some(ResourcingStrategy::FrontLoad)) => {
                 // @@@ Implement it!
@@ -384,7 +433,7 @@ impl ConfigNode {
 	/// Add a note to be displayed alongside this cell
 	fn add_note(&self, note: &str) {
 
-		self.notes.borrow_mut().push(note.to_string());
+		self.data.borrow_mut().add_note(note);
 	}
 
 	fn allocate_child_task_resource(&self, 
@@ -394,7 +443,7 @@ impl ConfigNode {
 			-> Result<(), String> {
 
 		for child_rc in &self.children {
-			try!(child_rc.borrow_mut()
+			try!(child_rc.borrow()
 						 .allocate_local_task_resource(root, managed, people_hash));
 			try!(child_rc.borrow()
 						 .allocate_child_task_resource(root, managed, people_hash));
@@ -406,7 +455,7 @@ impl ConfigNode {
 	/// Set up resource information in the chart
 	///
 	/// This is only called on the root node.
-	pub fn fill_in_gantt(&mut self) -> Result<(), String> {
+	pub fn fill_in_gantt(&self) -> Result<(), String> {
 
 		// Read in resource information ([people])
 		let weeks: u32 = try!(self.get_config_val("weeks", None));
@@ -415,7 +464,8 @@ impl ConfigNode {
 		// Move committed resource into the cells
 		try!(self.transfer_child_committed_resource(&mut people_hash));
 
-		// Handle all non-managed rows
+		// Handle all non-managed rows.  We'll then work out management
+        // spend on the resource that hasn't yet been allocated.
 		let managed = true;
 		try!(self.allocate_child_task_resource(self, !managed, &mut people_hash));
 
@@ -423,10 +473,10 @@ impl ConfigNode {
 		// @@@
 
 		// Handle all managed rows
-		// @@@
+        try!(self.allocate_child_task_resource(self, managed, &mut people_hash));
 
 		// Finally, store the people resources in the root_node
-		self.people = people_hash;
+		self.data.borrow_mut().people = people_hash;
 
 		Ok(())
 	}
@@ -439,7 +489,7 @@ impl ConfigNode {
 
 		// Ignore "special" nodes
 		for s in vec!["chart", "people", "rows"] {
-			if self.name == format!("[{}]", s) {
+			if self.data.borrow().name == format!("[{}]", s) {
 				return Ok(());
 			}
 		}
@@ -447,19 +497,19 @@ impl ConfigNode {
 	    let weeks: u32 = try!(root.get_config_val("weeks", None));
 
 	    // Set up row data for self
-        let mut row = TemplateRow::new(self.level, self.line_num, &self.name);
-		for val in &self.cells.get_weekly_numbers(weeks)	{
+        let mut row = TemplateRow::new(self.data.borrow().level, self.data.borrow().line_num, &self.data.borrow().name);
+		for val in &self.data.borrow().cells.get_weekly_numbers(weeks)	{
 			row.add_cell(*val as f32 / 4.0);
 		}
-		row.set_done(self.cells.count() as f32 / 4.0);
+		row.set_done(self.data.borrow().cells.count() as f32 / 4.0);
 
-        for n in self.notes.borrow().iter() {
+        for n in self.data.borrow().notes.iter() {
             row.add_note(n);
         }
 
-		let valid_who: Vec<String> = root.people.keys()
-		                                        .map(|x| x.clone())
-		                                        .collect();
+		let valid_who: Vec<String> = root.data.borrow().people.keys()
+                	                                          .map(|x| x.clone())
+                	                                          .collect();
 
 		match self.get_who(&valid_who) {
 			Ok(Some(who)) => {
@@ -474,7 +524,7 @@ impl ConfigNode {
 
 	    // Set up row data for children
 		for child_rc in &self.children {
-	    	try!(child_rc.borrow_mut().display_gantt_internal(root, context));
+	    	try!(child_rc.borrow().display_gantt_internal(root, context));
 	    }
 	    
 	    Ok(())
@@ -484,13 +534,13 @@ impl ConfigNode {
 	///
 	/// Sets up the resource rows, then recurses throught
 	/// the node hierarchy.
-	pub fn display_gantt(&mut self, context: &mut TemplateContext) 
+	pub fn display_gantt(&self, context: &mut TemplateContext) 
 			-> Result<(), String> {
 
 	    let weeks: u32 = try!(self.get_config_val("weeks", None));
 
 	    // Set up row data for people
-	    for (who, cells) in &self.people {
+	    for (who, cells) in &self.data.borrow().people {
 
 	        let mut row = TemplateRow::new(0, 0, &who);
 			for val in &cells.get_weekly_numbers(weeks)	{
@@ -508,13 +558,11 @@ impl ConfigNode {
 
 	}
 
-	// Functions to derive resourcing information
-	// Derive Remaining and slip/gain
-	// Draw the Gantt!
+	// @@@ Derive Remaining and slip/gain
 
 	fn augment_error(&self, err: String) -> String {
 		format!("Problem in node at line {}: {}", 
-				self.line_num, 
+				self.data.borrow().line_num, 
 				err.to_string())
 
 	}
@@ -573,7 +621,7 @@ impl ConfigNode {
 		// Locate attributes that represent a commitment, and
 		// build a map from ChartTime to duration.
 		let mut map = BTreeMap::new();
-		for (key, value) in &self.attributes {
+		for (key, value) in &self.data.borrow().attributes {
 			if key.starts_with('C') {
 				match ChartTime::new(&key[1 ..]) {
 					Ok(ct) => {
@@ -638,15 +686,15 @@ impl ConfigNode {
 	pub fn get_scheduling_strategy(&self) -> SchedulingStrategy {
 		
 		let key = "schedule";
-		if self.attributes.contains_key(key) {
+		if self.data.borrow().attributes.contains_key(key) {
 
-			if self.attributes[key] == "parallel" {
+			if self.data.borrow().attributes[key] == "parallel" {
 				SchedulingStrategy::Parallel
-			} else if self.attributes[key] == "serial" {
+			} else if self.data.borrow().attributes[key] == "serial" {
 				SchedulingStrategy::Serial
 			} else {
 				println!("Invalid scheduling strategy in node at line {}", 
-						 self.line_num);
+						 self.data.borrow().line_num);
 				SchedulingStrategy::Parallel
 			}
 		}
@@ -681,8 +729,8 @@ impl ConfigNode {
 
 		let key = "plan";
 		let plan_str: String;
-		if self.attributes.contains_key(key) {
-			plan_str = self.attributes[key].clone();
+		if self.data.borrow().attributes.contains_key(key) {
+			plan_str = self.data.borrow().attributes[key].clone();
 		}
 		else if self.is_leaf() {
 
@@ -765,8 +813,8 @@ impl ConfigNode {
 			},
 
 			Ok(None) => {
-				if valid.contains(&self.name) {
-					return Ok(Some(self.name.clone()));
+				if valid.contains(&self.data.borrow().name) {
+					return Ok(Some(self.data.borrow().name.clone()));
 				}
 				else {
 					return Ok(None)
@@ -786,14 +834,14 @@ impl ConfigNode {
 	pub fn get_budget(&self) -> Option<Duration> {
 
 		let key = "budget";
-		if !self.attributes.contains_key(key) {
+		if !self.data.borrow().attributes.contains_key(key) {
 			return None;
 		}
 
-		match self.attributes[key].parse::<f32>() {
+		match self.data.borrow().attributes[key].parse::<f32>() {
 			Err(e) => {
 				println!("Invalid budget in node at line {}: {}", 
-						 self.line_num, e.to_string());
+						 self.data.borrow().line_num, e.to_string());
 				return None;
 			}
 			Ok(dur) => {
@@ -807,12 +855,13 @@ impl ConfigNode {
 	pub fn get_node_at_line(&self, line_num: u32) 
 			-> Option<Weak<RefCell<ConfigNode>>> {
 
-		if self.line_num == line_num {
+		if self.data.borrow().line_num == line_num {
 			return None;
 		}
 		else {
 			for child_rc in &self.children {
-				if child_rc.borrow().line_num == line_num {
+                let child = child_rc.borrow();
+				if child.data.borrow().line_num == line_num {
 					return Some(Rc::downgrade(child_rc));
 				}
 				else {
@@ -844,7 +893,7 @@ impl ConfigNode {
 
 					// Higher-level or sibling node - return to the parent
 					// to handle.
-					if self.indent >= indent {
+					if self.data.borrow().indent >= indent {
 						break;
 					}
 

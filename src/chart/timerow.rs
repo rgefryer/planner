@@ -230,18 +230,21 @@ impl ChartTimeRow {
 
 	/// Transfer a number of cells to another row.  The cells are smoothed
 	/// out over the range, as much as is allowed by existing commitments.
-	/// If not all cells can be transferred, returns an error with the number 
-	/// of unallocated cells.
+    /// Returns a tuple of
+    /// - the last cell transferred (Option)
+    /// - the number of cells transferred
+    /// - the number of cells that could not be transferred
 	pub fn smear_transfer_to<'a, I>(&mut self,
 								dest: &mut ChartTimeRow, 
 								count: u32, 
-								range: I) -> Result<(), u32>
+                                range: I) -> (Option<u32>, u32, u32)
 	  where I: Iterator<Item=u32> {
 
 	  	let candidate_cells = range.collect::<Vec<u32>>();
 	  	let mut want_allocated = 0f64;
 	  	let mut allocated = 0u32;
 	  	let mut transferred_this_run = 1u32;
+        let mut last_transfer: Option<u32> = None;
 
 	  	'outer_loop: while transferred_this_run != 0 && allocated != count {
 
@@ -254,6 +257,16 @@ impl ChartTimeRow {
 		  			transferred_this_run += 1;
 		  			self.unset(*cell);
 		  			dest.set(*cell);
+                    match last_transfer {
+                        None => {
+                            last_transfer = Some(*cell);
+                        },
+                        Some(x) => {
+                            if x < *cell {
+                                last_transfer = Some(*cell);
+                            }
+                        }
+                    };
 
 		  			if allocated == count {
 		  				break 'outer_loop;
@@ -262,12 +275,7 @@ impl ChartTimeRow {
 		  	}
 	  	}
 
-	  	if allocated == count {
-	  		Ok(())
-	  	}
-	  	else {
-	  		Err(count - allocated)
-	  	}
+        (last_transfer, allocated, count - allocated)
 	}
 }
 
