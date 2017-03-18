@@ -405,10 +405,33 @@ impl ConfigNode {
                 // No-op - the management row is handled out-of-band
             },
             Ok(Some(ResourcingStrategy::SmearProRata)) => {
-                // @@@ Implement it!
-                // Note - days_to_allocate needs re-calc for pro-rata, don't use
-                // planned figure
-                self.add_note(&"ResourcingStrategy::SmearProRata not implemented!".to_string());
+
+                // Work out the time to spend per quarter day on this task.
+                let quarters_in_plan = weeks * 20;
+                let time_per_quarter = days_in_plan.quarters() as f32 / (quarters_in_plan as f32);
+
+                // Work out the time to spend in the rest of the period
+                let mut quarters_remaining = quarters_in_plan - start.get_quarters();
+
+                // Subtract any time already committed.
+                quarters_remaining -= self.data.borrow().cells.count_range(start.get_quarter() .. end.get_quarter())
+
+                if quarters_remaining < 0 {
+                    self.add_note(&format!("Already committed by {}", quarters_remaining * -1));
+                } else {
+                    // Smear the remainder.
+                    let mut node_data = self.data.borrow_mut();
+                    match people_hash.get_mut(&who)
+                                     .unwrap()
+                                     .smear_transfer_to(&mut node_data.cells,
+                                                        quarters_remaining as u32,
+                                                        start.get_quarter() .. end.get_quarter()) {
+                        (_, _, unallocated) if unallocated != 0 => {
+                            node_data.add_note(&format!("{} days did not fit", unallocated as f32 / 4.0))
+                        },
+                        _ => {}
+                    };
+                }
             }
             Ok(Some(ResourcingStrategy::SmearRemaining)) => {
                 // @@@ Implement it!
