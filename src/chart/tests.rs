@@ -81,21 +81,27 @@ fn timerow_test() {
 
     // Successful smear
     let mut g2 = ChartTimeRow::new();
-    g.smear_transfer_to(&mut g2, 10, 0..50).unwrap();
+    match g.smear_transfer_to(&mut g2, 10, 0..50) {
+        (Some(_), 10, 0) => assert!(true),
+        _ => assert!(false),
+    }
     assert!(g.count() == 40);
     assert!(g2.count() == 10);
 
     // Smear that required multiple passes
     g2.set_range(25..50);
-    assert!(g2.count() == 31);
-    g.smear_transfer_to(&mut g2, 10, 0..50).unwrap();
-    assert!(g.count() == 30);
-    assert!(g2.count() == 41);
+    assert_eq!(g2.count(), 30);
+    match g.smear_transfer_to(&mut g2, 10, 0..50) {
+        (Some(_), 10, 0) => assert!(true),
+        _ => assert!(false),
+    }
+    assert_eq!(g.count(), 30);
+    assert_eq!(g2.count(), 40);
 
     // Failure to smear
     match g.smear_transfer_to(&mut g2, 11, 0..50) {
-        Ok(_) => assert!(false),
-        Err(unallocated) => assert!(unallocated == 2),
+        (Some(_), 10, 1) => assert!(true),
+        _ => assert!(false),
     }
 
     // Successful fill
@@ -394,11 +400,11 @@ fn nodes_test() {
     // - Local value is parallel
     // - Local value is not present
     assert_eq!(sibling2grandchild.borrow().get_scheduling_strategy(),
-               SchedulingStrategy::Serial);
+               Ok(SchedulingStrategy::Serial));
     assert_eq!(grandchild.borrow().get_scheduling_strategy(),
-               SchedulingStrategy::Parallel);
+               Ok(SchedulingStrategy::Parallel));
     assert_eq!(greatgrandchild.borrow().get_scheduling_strategy(),
-               SchedulingStrategy::Parallel);
+               Ok(SchedulingStrategy::Parallel));
 
     // Test "resource" retrieval on nodes where:
     // - No value is available
