@@ -130,6 +130,7 @@ Holidays
   rsl
   - who: rsl
   - plan: 25pcy
+  - C4.2.3: 3.5
 
   bdh
   - who: bdh
@@ -195,16 +196,16 @@ EAS Prod SFRs
 
 PRD 12345
 - budget: 90
-- schedule: series
+- schedule: serial
 - who: rsl
 - resource: frontload
+- earliest-start: 5
 
   DCUT
-  - plan: 30
+  - plan: 10
 
   FV
   - plan: 10  # overridden by plan for sub-tasks
-  - schedule: parallel
   - who: bg5
 
     Test

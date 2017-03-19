@@ -37,6 +37,15 @@ impl FromStr for ChartTime {
 
 impl ChartTime {
 
+    pub fn new_from_quarter(q: u32) -> ChartTime {
+        let week = q / 20;
+        let day = (q % 20) / 4;
+        let quarter = q - week*20 - day*4;
+        ChartTime{ week: week+1, 
+                   day: Some(day+1), 
+                   quarter: Some(quarter+1) }
+    }
+
 	pub fn new(desc: &str) -> Result<ChartTime, String> {
 		let v: Vec<&str> = desc.split('.').collect();
 		if v.len() > 3 {

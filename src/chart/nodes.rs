@@ -27,9 +27,13 @@ struct ConfigNodeData {
 	// Cells are only used on leaf nodes
 	cells: ChartTimeRow,
 
+    // Optional first and last dates that the task
+    // can happen on.
+    start: Option<ChartTime>,
+    end: Option<ChartTime>,
+
 	// Notes are problems to display on the chart
 	notes: Vec<String>
-    
 }
 
 impl ConfigNodeData {
@@ -42,6 +46,8 @@ impl ConfigNodeData {
                          attributes: HashMap::new(), 
                          people: HashMap::new(),
                          cells: ChartTimeRow::new(),
+                         start: None,
+                         end: None,
                          notes: Vec::new() }
 
     }
@@ -51,6 +57,35 @@ impl ConfigNodeData {
         self.notes.push(note.to_string());
     }
 
+    fn update_start(&mut self, start: ChartTime) {
+
+        // Move out the start date if necessary
+        match self.start {
+            Some(t) => {
+                if start > t {
+                    self.start = Some(start);
+                }
+            },
+            None => {
+                self.start = Some(start);
+            }
+        };
+    }
+
+    fn update_end(&mut self, end: ChartTime) {
+
+        // Move in the end date if necessary
+        match self.end {
+            Some(t) => {
+                if end < t {
+                    self.end = Some(end);
+                }
+            },
+            None => {
+                self.end = Some(end);
+            }
+        };
+    }
 }
 
 #[derive(Debug)]
@@ -316,31 +351,41 @@ impl ConfigNode {
 		Ok(())
 	}
 
-	fn allocate_local_task_resource(&self, 
-									root: &ConfigNode, 
-									managed: bool,
-									people_hash: &mut HashMap<String, ChartTimeRow>) 
-			-> Result<(), String> {
+    /// Gantt out future resource for this node, and all children
+    ///
+    /// Returns the time of the last allocation, if there was one
+	fn allocate_node_task_resource(&self, 
+							  root: &ConfigNode, 
+							  managed: bool,
+							  people_hash: &mut HashMap<String, ChartTimeRow>) 
+			-> Result<Option<ChartTime>, String> {
 
-		// If there's no planned ressource against this node, do nothing.
-		let weeks: u32 = try!(root.get_config_val("weeks", None));
-		let days_in_plan: Duration;
-		match self.get_plan(&ChartTime::new(&format!("{}", weeks+1)).unwrap(), 
-											 &Duration::new_days(weeks as f32 * 5.0)) {
-			Ok(Some(d)) => {
-				days_in_plan = d;
-			},
-			Ok(None) => {
-				return Ok(());
+        // If there's no planned ressource against this node, do nothing.
+        let mut last_allocation: Option<ChartTime> = None;
+        let weeks: u32 = try!(root.get_config_val("weeks", None));
+        let days_in_plan: Duration;
+
+        // If this is not a leaf node, do nothing
+        if !self.is_leaf() {
+			return Ok(last_allocation);
+        }
+
+        match self.get_plan(&ChartTime::new(&format!("{}", weeks+1)).unwrap(), 
+                                             &Duration::new_days(weeks as f32 * 5.0)) {
+            Ok(Some(d)) => {
+                days_in_plan = d;
+            },
+            Ok(None) => {
+                return Ok(last_allocation);
 			},
 			Err(e) => {
 				self.add_note(&e);
-				return Ok(());
+				return Ok(last_allocation);
 			}
 		};
 
 		if days_in_plan.is_zero() {
-			return Ok(());
+			return Ok(last_allocation);
 		}
 
 		// If the managed state of this node doesn't match the "managed"
@@ -348,17 +393,17 @@ impl ConfigNode {
 		match self.get_non_managed() {
             Ok(true) => {
                 if managed {
-                    return Ok(());
+                    return Ok(last_allocation);
                 }
             }
             Ok(false) => {
                 if !managed {
-                    return Ok(());
+                    return Ok(last_allocation);
                 }
             }
             Err(e) => {
                 self.add_note(&e);
-                return Ok(());
+                return Ok(last_allocation);
             }
         };
 
@@ -367,10 +412,10 @@ impl ConfigNode {
 		let days_to_allocate = days_in_plan - days_in_chart;
 		if days_to_allocate.is_negative() {
 			self.add_note(&format!("Over-committed by {} days; update plan", days_to_allocate.days() * -1.0));
-			return Ok(());
+			return Ok(last_allocation);
 		}
 		if days_to_allocate.is_zero() {
-			return Ok(());
+			return Ok(last_allocation);
 		}
 
 		// If there's no owner against this node, do nothing
@@ -384,21 +429,17 @@ impl ConfigNode {
 			},
 			Ok(None) => {
 				self.add_note("This task needs allocating to someone");
-				return Ok(());
+				return Ok(last_allocation);
 			},
 			Err(e) => {
 				self.add_note(&e);
-				return Ok(());
+				return Ok(last_allocation);
 			}
 		};
 
-		// Get start time for the period to allocate.  Assume that everything
-		// prior to this has been committed.
-		let start: ChartTime = 
-				try!(root.get_config_val("today", Some(ChartTime::new("1").unwrap())));
-
-        // Get end time for the chart
-        let end: ChartTime = ChartTime::new(&format!("{}", weeks+1)).unwrap();
+        // Get start and end times as quarters
+        let start_q = self.data.borrow().start.unwrap().get_quarter();
+        let end_q = self.data.borrow().end.unwrap().get_quarter();
 
         // Get allocation type
         match self.get_resourcing_strategy() {
@@ -412,11 +453,11 @@ impl ConfigNode {
                 let time_per_quarter = days_in_plan.quarters() as f32 / (quarters_in_plan as f32);
 
                 // Work out the time to spend in the rest of the period
-                let quarters_remaining = quarters_in_plan as i32 - start.get_quarter() as i32;
+                let quarters_remaining = quarters_in_plan as i32 - start_q as i32;
                 let mut time_to_spend = (quarters_remaining as f32 * time_per_quarter).ceil();
 
                 // Subtract any time already committed.
-                time_to_spend -= self.data.borrow().cells.count_range(start.get_quarter() .. end.get_quarter()) as f32;
+                time_to_spend -= self.data.borrow().cells.count_range(start_q .. end_q) as f32;
 
                 if time_to_spend < -0.01 {
                     self.add_note(&format!("Over-committed by {} days; update plan", time_to_spend * -1.0));
@@ -427,11 +468,14 @@ impl ConfigNode {
                                      .unwrap()
                                      .smear_transfer_to(&mut node_data.cells,
                                                         time_to_spend as u32,
-                                                        start.get_quarter() .. end.get_quarter()) {
-                        (_, _, unallocated) if unallocated != 0 => {
-                            node_data.add_note(&format!("{} days did not fit", unallocated as f32 / 4.0))
+                                                        start_q .. end_q) {
+                        (last, _, unallocated) if unallocated != 0 => {
+                            node_data.add_note(&format!("{} days did not fit", unallocated as f32 / 4.0));
+                            last_allocation = self.max_time(last_allocation, last);
                         },
-                        _ => {}
+                        (last, _, _) => {
+                            last_allocation = self.max_time(last_allocation, last);
+                        }
                     };
                 }
             }
@@ -443,16 +487,32 @@ impl ConfigNode {
                                  .unwrap()
                                  .smear_transfer_to(&mut node_data.cells,
                                                     days_to_allocate.quarters() as u32,
-                                                    start.get_quarter() .. end.get_quarter()) {
-                    (_, _, unallocated) if unallocated != 0 => {
-                        node_data.add_note(&format!("{} days did not fit", unallocated as f32 / 4.0))
+                                                    start_q .. end_q) {
+                    (last, _, unallocated) if unallocated != 0 => {
+                        node_data.add_note(&format!("{} days did not fit", unallocated as f32 / 4.0));
+                        last_allocation = self.max_time(last_allocation, last);
                     },
-                    _ => {}
+                    (last, _, _) => {
+                        last_allocation = self.max_time(last_allocation, last);
+                    }
                 };
             }
             Ok(Some(ResourcingStrategy::FrontLoad)) => {
-                // @@@ Implement it!
-                self.add_note(&"ResourcingStrategy::FrontLoad not implemented!".to_string());
+
+                let mut node_data = self.data.borrow_mut();
+                match people_hash.get_mut(&who)
+                                 .unwrap()
+                                 .fill_transfer_to(&mut node_data.cells,
+                                                   days_to_allocate.quarters() as u32,
+                                                   start_q .. end_q) {
+                    (last, _, unallocated) if unallocated != 0 => {
+                        node_data.add_note(&format!("{} days did not fit", unallocated as f32 / 4.0));
+                        last_allocation = self.max_time(last_allocation, last);
+                    },
+                    (last, _, _) => {
+                        last_allocation = self.max_time(last_allocation, last);
+                    }
+                };
             }
             Ok(Some(ResourcingStrategy::BackLoad)) => {
                 // @@@ Implement it!
@@ -470,29 +530,140 @@ impl ConfigNode {
             },
         };
 
-		return Ok(());
+		return Ok(last_allocation);
 	}
+
+    /// Gantt out future resource for this node, and all children
+    ///
+    /// Returns the time of the last allocation, if there was one
+    fn allocate_task_resource(&self, 
+                              root: &ConfigNode, 
+                              start_time: ChartTime,
+                              managed: bool,
+                              people_hash: &mut HashMap<String, ChartTimeRow>) 
+            -> Result<Option<ChartTime>, String> {
+
+        let mut last_allocation: Option<ChartTime> = None;
+        let weeks: u32 = try!(root.get_config_val("weeks", None));
+
+        // Ensure that a start and end time are set up for the allocation.
+        self.data.borrow_mut().update_start(start_time);
+        let mut earliest_ct = start_time;
+        match self.get_earliest_start() {
+            Ok(Some(ct)) => {
+                earliest_ct = ct;
+            },
+            Err(e) => {
+                self.add_note(&e);
+            },
+            _ => {}
+        };
+        self.data.borrow_mut().update_start(earliest_ct);
+
+        self.data.borrow_mut().update_end(
+                ChartTime::new(&format!("{}", weeks+1)).unwrap());
+        let mut latest_ct = self.data.borrow_mut().end.unwrap();
+        match self.get_latest_end() {
+            Ok(Some(ct)) => {
+                latest_ct = ct;
+            },
+            Err(e) => {
+                self.add_note(&e);
+            },
+            _ => {}
+        };
+        self.data.borrow_mut().update_end(latest_ct);
+
+        // Do resource allocation on the local node.
+        last_allocation = self.max_time_ct(last_allocation, 
+            try!(self.allocate_node_task_resource(root, 
+                                        managed, people_hash)));        
+
+        // Work out whether to serialise the children.
+        let mut scheduling_serial = false;
+        match self.get_scheduling_strategy() {
+            Ok(SchedulingStrategy::Serial) => {
+                scheduling_serial = true;
+            },
+            Err(e) => {
+                self.add_note(&e);
+            },
+            _ => {}
+        };
+
+        // Allocate resource in all the children
+        for child_rc in &self.children {
+
+            // If this node is marked as serial, then all child nodes
+            // must start after any existing work is complete.
+            let mut child_start_time: ChartTime = self.data.borrow().start.unwrap();
+            if scheduling_serial {
+                match last_allocation {
+                    Some(ct) => {
+                        child_start_time = ChartTime::new_from_quarter(ct.get_quarter() + 1);
+                    },
+                    None => {}
+                };
+            }
+
+            // Allocate the child resource, update the last_allocation
+            last_allocation = self.max_time_ct(last_allocation, try!(child_rc.borrow()
+                                    .allocate_task_resource(root, 
+                                        child_start_time, managed, people_hash)));
+        }
+
+        return Ok(last_allocation);
+    }
+
+    fn max_time(&self, a: Option<ChartTime>, b: Option<u32>) 
+            -> Option<ChartTime> {
+
+        match b {
+            Some(b_q) => {
+                let b_ct = ChartTime::new_from_quarter(b_q);
+                match a {
+                    Some(a_ct) => {
+                        if b_ct > a_ct {
+                            Some(b_ct)
+                        } else {
+                            Some(a_ct)
+                        }
+                    },
+                    None => {
+                        Some(b_ct)
+                    }
+                }
+            },
+            None => a
+        }
+    }
+
+    fn max_time_ct(&self, a: Option<ChartTime>, b: Option<ChartTime>) 
+            -> Option<ChartTime> {
+
+        match b {
+            Some(b_ct) => {
+                match a {
+                    Some(a_ct) => {
+                        if b_ct > a_ct {
+                            Some(b_ct)
+                        } else {
+                            Some(a_ct)
+                        }
+                    },
+                    None => {
+                        Some(b_ct)
+                    }
+                }
+            },
+            None => a
+        }
+    }
 
 	/// Add a note to be displayed alongside this cell
 	fn add_note(&self, note: &str) {
 
 		self.data.borrow_mut().add_note(note);
-	}
-
-	fn allocate_child_task_resource(&self, 
-									root:&ConfigNode, 
-									managed: bool, 
-									people_hash: &mut HashMap<String, ChartTimeRow>) 
-			-> Result<(), String> {
-
-		for child_rc in &self.children {
-			try!(child_rc.borrow()
-						 .allocate_local_task_resource(root, managed, people_hash));
-			try!(child_rc.borrow()
-						 .allocate_child_task_resource(root, managed, people_hash));
-		}
-
-		Ok(())
 	}
 
     fn get_management_row(&self)
@@ -621,6 +792,7 @@ impl ConfigNode {
 
 		// Read in resource information ([people])
 		let weeks: u32 = try!(self.get_config_val("weeks", None));
+        let start_time = try!(self.get_config_val("today", Some(ChartTime::new("1").unwrap())));
 		let mut people_hash = try!(self.get_people(weeks));
 
 		// Move committed resource into the cells
@@ -629,13 +801,13 @@ impl ConfigNode {
 		// Handle all non-managed rows.  We'll then work out management
         // spend on the resource that hasn't yet been allocated.
 		let managed = true;
-		try!(self.allocate_child_task_resource(self, !managed, &mut people_hash));
+		try!(self.allocate_task_resource(self, start_time, !managed, &mut people_hash));
 
 		// Handle Management
         try!(self.allocate_management_resource(weeks, &mut people_hash));
 
 		// Handle all managed rows
-        try!(self.allocate_child_task_resource(self, managed, &mut people_hash));
+        try!(self.allocate_task_resource(self, start_time, managed, &mut people_hash));
 
 		// Finally, store the people resources in the root_node
 		self.data.borrow_mut().people = people_hash;
@@ -898,23 +1070,22 @@ impl ConfigNode {
 	///
 	/// The scheduling approach is not inherited.  By default.
 	/// a nodes children are scheduled in parallel
-	pub fn get_scheduling_strategy(&self) -> SchedulingStrategy {
+	pub fn get_scheduling_strategy(&self) -> Result<SchedulingStrategy, String> {
 		
 		let key = "schedule";
 		if self.data.borrow().attributes.contains_key(key) {
 
 			if self.data.borrow().attributes[key] == "parallel" {
-				SchedulingStrategy::Parallel
+				Ok(SchedulingStrategy::Parallel)
 			} else if self.data.borrow().attributes[key] == "serial" {
-				SchedulingStrategy::Serial
+				Ok(SchedulingStrategy::Serial)
 			} else {
-				println!("Invalid scheduling strategy in node at line {}", 
-						 self.data.borrow().line_num);
-				SchedulingStrategy::Parallel
+                Err(format!("Invalid scheduling strategy: {}", 
+                    self.data.borrow().attributes[key]))
 			}
 		}
 		else {
-			SchedulingStrategy::Parallel
+			Ok(SchedulingStrategy::Parallel)
 		}
 	}
 
