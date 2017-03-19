@@ -37,9 +37,10 @@ pub struct TemplateRow {
 impl TemplateRow {
     pub fn new(indent: u32, line_num: u32, name: &str) -> TemplateRow {
         TemplateRow {
-            what: format!("{}{}", 
-                          format!("{:width$}", " ", width = (indent*3) as usize), 
-                          name).replace(" ", "&nbsp;"),
+            what: format!("{}{}",
+                          format!("{:width$}", " ", width = (indent * 3) as usize),
+                          name)
+                    .replace(" ", "&nbsp;"),
             who: "".to_string(),
             done: " ".to_string(),
             gain: " ".to_string(),
@@ -49,7 +50,7 @@ impl TemplateRow {
             even: false,
             cells: Vec::new(),
             notes: Vec::new(),
-            notes_html: String::new()
+            notes_html: String::new(),
         }
     }
 
@@ -61,12 +62,11 @@ impl TemplateRow {
         if val.abs() < 0.01 {
             String::new()
         } else {
-            format!("{:.2}", val).replace(".00", "&nbsp;&nbsp;&nbsp;")
-                                  .replace(".50", ".5&nbsp;")
+            format!("{:.2}", val).replace(".00", "&nbsp;&nbsp;&nbsp;").replace(".50", ".5&nbsp;")
         }
     }
 
-    pub fn add_cell(&mut self,  val: f32, start: bool) {
+    pub fn add_cell(&mut self, val: f32, start: bool) {
         let mut styles = "grid".to_string();
         if start {
             styles.push_str(" start");
@@ -77,7 +77,7 @@ impl TemplateRow {
         self.cells.push((styles, TemplateRow::format_f32(val)));
     }
 
-    pub fn add_note(&mut self,  val: &str) {
+    pub fn add_note(&mut self, val: &str) {
         self.notes.push(val.to_string());
     }
 
@@ -120,23 +120,25 @@ impl TemplateRow {
 #[derive(Serialize)]
 pub struct TemplateContext {
     cell_headers: Vec<(String, String)>,
-    rows: Vec<TemplateRow>
+    rows: Vec<TemplateRow>,
 }
 
- impl TemplateContext {
+impl TemplateContext {
     pub fn new(cells: u32, start_cell: u32) -> TemplateContext {
         TemplateContext {
-            cell_headers: (1 .. cells+1)
-                .map(|s| ( if s == start_cell {
-                                    "grid start".to_string()
-                                } else if s == 1 {
-                                    "grid border".to_string()
-                                } else {
-                                    "grid".to_string()
-                                }, 
-                            format!("{}", s)))
+            cell_headers: (1..cells + 1)
+                .map(|s| {
+                    (if s == start_cell {
+                         "grid start".to_string()
+                     } else if s == 1 {
+                        "grid border".to_string()
+                    } else {
+                        "grid".to_string()
+                    },
+                     format!("{}", s))
+                })
                 .collect(),
-            rows: Vec::new()
+            rows: Vec::new(),
         }
     }
 
@@ -150,15 +152,14 @@ pub struct TemplateContext {
             row.prepare_html();
         }
     }
- }
+}
 
 
 #[cfg(not(test))]
 fn generate_chart_html(root: &mut ConfigNode) -> Result<Template, String> {
 
     let weeks: u32 = try!(root.get_config_val("weeks", None));
-    let start: ChartTime = 
-        try!(root.get_config_val("today", Some(ChartTime::new("1").unwrap())));
+    let start: ChartTime = try!(root.get_config_val("today", Some(ChartTime::new("1").unwrap())));
     let start_week = (start.get_quarter() + 20) / 20;
 
     let mut context = TemplateContext::new(weeks, start_week);
@@ -192,12 +193,12 @@ fn index() -> Template {
             match generate_chart_html(&mut root) {
                 Ok(template) => {
                     return template;
-                },
+                }
                 Err(e) => {
                     return generate_error_html(&e);
                 }
             }
-        },
+        }
         Err(e) => {
             return generate_error_html(&e);
         }

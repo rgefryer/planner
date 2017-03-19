@@ -4,7 +4,8 @@
 extern crate rocket;
 extern crate rocket_contrib;
 extern crate serde_json;
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate serde_derive;
 
 mod chart;
 
@@ -12,4 +13,3 @@ mod chart;
 fn main() {
     chart::serve_web();
 }
-
