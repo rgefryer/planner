@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 mod duration;
+mod period;
 mod timerow;
 mod readfile;
 mod nodes;

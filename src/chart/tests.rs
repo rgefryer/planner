@@ -1,5 +1,6 @@
 use super::duration::*;
 use super::time::*;
+use super::period::*;
 use super::timerow::*;
 use super::nodes::*;
 use super::file::*;
@@ -52,6 +53,29 @@ fn time_test() {
     assert_eq!(t1.get_duration().quarters(), 20);
     assert_eq!(t2.get_duration().quarters(), 4);
     assert_eq!(t3.get_duration().quarters(), 1);
+}
+
+#[test]
+fn period_test() {
+    let t = ChartTime::new("3").unwrap();
+    let d = Duration::new_days(1.25);
+    let p1 = ChartPeriod::new_from_time_dur(&t, &d).unwrap();
+    let p2 = ChartPeriod::new(40, 44).unwrap();
+    assert_eq!(p1, p2);
+
+    let p3 = ChartPeriod::new(40, 50).unwrap();
+    assert_eq!(p2.intersect(&p3).unwrap(),
+               ChartPeriod::new(40, 44).unwrap());
+    assert_eq!(p2.union(&p3).unwrap(), ChartPeriod::new(40, 50).unwrap());
+
+    let p4 = ChartPeriod::new(42, 50).unwrap();
+    assert_eq!(p2.intersect(&p4).unwrap(),
+               ChartPeriod::new(42, 44).unwrap());
+    assert_eq!(p2.union(&p4).unwrap(), ChartPeriod::new(40, 50).unwrap());
+
+    let p5 = ChartPeriod::new(45, 50).unwrap();
+    assert_eq!(p2.intersect(&p5), None);
+    assert_eq!(p2.union(&p5), None);
 }
 
 #[test]

@@ -6,8 +6,6 @@ Currently, very much in development!
 
 ## Ideas for next development
 
-* Add a class for ChartPeriod - all we have at the moment are
-  a time and duration.
 * For each user, keep a period_available
 * Rethink periods in smearprorata
   * Smear over intersection of 
