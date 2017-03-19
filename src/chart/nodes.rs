@@ -370,6 +370,8 @@ impl ConfigNode {
 			return Ok(last_allocation);
         }
 
+        // @@@ Duration passed into get_plan needs to be the time that
+        // the user is in-plan.  This affects multiple calls.
         match self.get_plan(&ChartTime::new(&format!("{}", weeks+1)).unwrap(), 
                                              &Duration::new_days(weeks as f32 * 5.0)) {
             Ok(Some(d)) => {
@@ -438,8 +440,9 @@ impl ConfigNode {
 		};
 
         // Get start and end times as quarters
+        // @@@ Both times should factor in the task-owners time-in-plan
         let start_q = self.data.borrow().start.unwrap().get_quarter();
-        let end_q = self.data.borrow().end.unwrap().get_quarter();
+        let end_q = self.data.borrow().end.unwrap().get_quarter() + 1;
 
         // Get allocation type
         match self.get_resourcing_strategy() {
@@ -449,6 +452,7 @@ impl ConfigNode {
             Ok(Some(ResourcingStrategy::SmearProRata)) => {
 
                 // Work out the time to spend per quarter day on this task.
+                // @@@ Should be time for this individual, not in full plan
                 let quarters_in_plan = weeks * 20;
                 let time_per_quarter = days_in_plan.quarters() as f32 / (quarters_in_plan as f32);
 
@@ -480,8 +484,6 @@ impl ConfigNode {
                 }
             }
             Ok(Some(ResourcingStrategy::SmearRemaining)) => {
-                // @@@ Implement it!
-                // self.add_note(&"ResourcingStrategy::SmearRemaining not implemented!".to_string());
                 let mut node_data = self.data.borrow_mut();
                 match people_hash.get_mut(&who)
                                  .unwrap()
@@ -561,7 +563,7 @@ impl ConfigNode {
         self.data.borrow_mut().update_start(earliest_ct);
 
         self.data.borrow_mut().update_end(
-                ChartTime::new(&format!("{}", weeks+1)).unwrap());
+                ChartTime::new(&format!("{}.5.4", weeks)).unwrap());
         let mut latest_ct = self.data.borrow_mut().end.unwrap();
         match self.get_latest_end() {
             Ok(Some(ct)) => {

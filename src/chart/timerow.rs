@@ -241,18 +241,34 @@ impl ChartTimeRow {
 	  where I: Iterator<Item=u32> {
 
 	  	let candidate_cells = range.collect::<Vec<u32>>();
-	  	let mut want_allocated = 0f64;
-	  	let mut allocated = 0u32;
-	  	let mut transferred_this_run = 1u32;
+        let mut allocated = 0u32;
+        let mut transferred_this_run = 1u32;
         let mut last_transfer: Option<u32> = None;
 
-	  	'outer_loop: while transferred_this_run != 0 && allocated != count {
+        'outer_loop: while transferred_this_run != 0 && allocated != count {
 
-		  	let amount_per_cell = (count - allocated) as f64 / candidate_cells.len() as f64;
+    	  	let mut want_allocated_this_run = 0f64;
+            let mut num_allocated_in_dest = 0u32;
+            for cell in &candidate_cells {
+                if dest.is_set(*cell) {
+                    num_allocated_in_dest += 1;
+                }
+            }
+            let free_cells = candidate_cells.len() as u32 - num_allocated_in_dest;
+		  	let amount_per_cell = (count - allocated) as f64 / free_cells as f64;
+
 		  	transferred_this_run = 0;
 		  	for cell in &candidate_cells {
-		  		want_allocated += amount_per_cell;
-		  		if want_allocated > (allocated as f64) && self.is_set(*cell) && !dest.is_set(*cell) {
+
+                // Skip cells that are already allocated
+                if dest.is_set(*cell) {
+                    continue
+                }
+
+		  		want_allocated_this_run += amount_per_cell;
+                // Use magic-number in the following line to
+                // avoid floating-point inaccuracies.
+		  		if want_allocated_this_run > 0.0001 + (transferred_this_run as f64) && self.is_set(*cell) {
 		  			allocated += 1;
 		  			transferred_this_run += 1;
 		  			self.unset(*cell);

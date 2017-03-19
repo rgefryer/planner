@@ -154,7 +154,8 @@ Overheads
     rf    # If there's no "who:", use the row name
     rsl
     bdh
-    - plan: 2:3.5
+    - resource: smearremaining
+    - plan: 2:3.5, 3:4
     - C2.3.3: 3.5
     jw2
     bg5
